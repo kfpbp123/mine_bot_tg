@@ -104,10 +104,16 @@ def generate_post(user_input, persona="uz"):
         print(f"🔗 Найдена ссылка, читаю сайт: {url}")
         page_text = fetch_page_content(url)
 
-    # Достаем нужный шаблон по ключу (uz, ru, en)
     selected_prompt = PROMPTS.get(persona, PROMPTS["uz"])
-    
     prompt = f"{selected_prompt}\n\nСырая информация от пользователя:\n{user_input}{site_context}"
+    
     response = client.models.generate_content(model=MODEL_ID, contents=prompt)
     
-    return response.text.strip()
+    # --- ИСПРАВЛЕНИЕ ФОРМАТИРОВАНИЯ ---
+    final_text = response.text.strip()
+    
+    # Жестко заменяем маркдауновские звездочки на HTML-теги для жирного текста
+    final_text = final_text.replace("**", "<b>", 1).replace("**", "</b>", 1) # Если ИИ ставит их парами
+    final_text = final_text.replace("**", "") # Удаляем все оставшиеся случайные звездочки
+    
+    return final_text

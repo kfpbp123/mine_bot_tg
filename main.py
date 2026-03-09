@@ -518,7 +518,10 @@ def callback_handler(call):
     if call.data.startswith('q_'):
         parts = call.data.split('_')
         action, val = parts[1], int(parts[2])
-        if action == 'page': show_queue_page(chat_id, val, target_id)
+        if action == 'page': 
+            show_queue_page(chat_id, val, target_id)
+            bot.answer_callback_query(call.id) # Убирает "часики" загрузки на кнопке
+            return # <--- ВОТ ЭТОГО СЛОВА НЕ ХВАТАЛО!
         elif action == 'del':
             database.delete_from_queue(val)
             bot.answer_callback_query(call.id, "🗑 Пост удален!")
@@ -649,7 +652,7 @@ def handle_document(message):
             bot.reply_to(message, "✅ Файл прикреплен!")
             return
     bot.reply_to(message, "Сделай Reply на сообщение с кнопками!")
-    
+
 # --- СБОР КОММЕНТАРИЕВ ИЗ ГРУППЫ ---
 @bot.message_handler(func=lambda message: message.chat.type in ['group', 'supergroup'], content_types=['text'])
 def catch_group_comments(message):

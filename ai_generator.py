@@ -6,15 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 import time
 
-# Переключаемся на самую продвинутую модель, она лучше понимает контекст игр
+# Используем Flash 2.0 для скорости, но с максимально простыми настройками
 MODEL_ID = "gemini-2.0-flash"
 client = genai.Client(api_key=config.GEMINI_KEY)
-
-PROMPTS = {
-    "uz": "Siz Minecraft olami haqidagi Telegram kanali muharririsiz. Qiziqarli post yozing.",
-    "ru": "Вы профессиональный редактор Telegram-канала о Minecraft. Напишите интересный пост на основе данных. Используйте эмодзи и HTML-оформление.",
-    "en": "You are a professional Minecraft community editor. Write an engaging post."
-}
 
 def extract_url(text):
     urls = re.findall(r'(https?://[^\s]+)', text)
@@ -31,11 +25,15 @@ def fetch_page_content(url):
 def generate_post(user_input, persona="uz"):
     url = extract_url(user_input)
     site_content = fetch_page_content(url) if url else ""
-    selected_prompt = PROMPTS.get(persona, PROMPTS["uz"])
     
-    # Пытаемся сделать промпт максимально безопасным для ИИ
-    full_prompt = f"{selected_prompt}\n\nОПИСАНИЕ ИГРОВОГО КОНТЕНТА (MINECRAFT):\n{user_input}\n{site_content}\n\nНапиши обзорный пост для геймеров. Используй HTML <b> и <blockquote>."
-    
+    # Максимально простой и понятный промпт, как в первой версии
+    if persona == "ru":
+        prompt = f"Напиши крутой пост для Телеграм канала про этот мод/контент Minecraft. Это ИГРА, поэтому используй геймерский стиль. Текст: {user_input} {site_content}. Используй HTML теги <b> и <blockquote>."
+    elif persona == "uz":
+        prompt = f"Minecraft haqidagi ushbu mod uchun ajoyib post yoz. Bu faqat O'YIN. Til: o'zbekcha (lotin). Текст: {user_input} {site_content}. HTML taglardan foydalan (<b>, <blockquote>)."
+    else:
+        prompt = f"Write an exciting Telegram post about this Minecraft mod. It's a GAME. Text: {user_input} {site_content}. Use HTML <b> and <blockquote>."
+
     safety_settings = [
         types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
         types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
@@ -43,34 +41,25 @@ def generate_post(user_input, persona="uz"):
         types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
     ]
 
-    for attempt in range(3):
-        try:
-            # На второй попытке упрощаем запрос до минимума
-            current_prompt = full_prompt if attempt == 0 else f"Напиши короткий пост про этот мод Minecraft (используй {persona}): {user_input[:200]}"
+    try:
+        response = client.models.generate_content(
+            model=MODEL_ID, 
+            contents=prompt,
+            config=types.GenerateContentConfig(safety_settings=safety_settings)
+        )
+        if response.text:
+            final_text = response.text.strip()
+            final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
+            return final_text
+    except Exception as e:
+        print(f"Error: {e}")
             
-            response = client.models.generate_content(
-                model=MODEL_ID, 
-                contents=current_prompt,
-                config=types.GenerateContentConfig(safety_settings=safety_settings)
-            )
-            
-            if response.text:
-                final_text = response.text.strip()
-                final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
-                return final_text
-            
-            print(f"⚠️ Попытка {attempt+1}: Модель вернула пустой ответ (возможно, блок).")
-            time.sleep(1)
-        except Exception as e:
-            print(f"❌ Ошибка API на попытке {attempt+1}: {str(e)}")
-            time.sleep(1)
-            
-    return "⚠️ ИИ отказался обрабатывать этот текст из-за фильтров (слишком много слов о взрывах/оружии). Попробуйте отправить ссылку на мод или сократить описание."
+    return "⚠️ Ошибка. Попробуйте отправить еще раз или упростите текст."
 
 def rewrite_post(text, style="short"):
-    instruction = f"Перепиши этот текст в стиле: {style}. Сохрани HTML."
+    prompt = f"Перепиши этот текст в стиле {style}, сохранив HTML теги: {text}"
     try:
-        response = client.models.generate_content(model=MODEL_ID, contents=f"{instruction}\n\nТекст:\n{text}")
+        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         return re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text.strip())
     except: return text
 

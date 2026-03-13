@@ -17,7 +17,14 @@ MESSAGES = {
         'ad_added': "✅ Reklama qo'shildi",
         'no_draft': "⚠️ Chernovik bo'sh",
         'reply_info': "ℹ️ Faylni biriktirish uchun, ushbu postga fayl bilan 'Reply' qiling.",
-        'analyzing': "🔍 <b>Tahlil qilinmoqda...</b>"
+        'analyzing': "🔍 <b>Tahlil qilinmoqda...</b>",
+        'stats': """📊 <b>Statistika</b>
+
+Jami postlar: <b>{total}</b>
+Chop etilgan: <b>{published}</b>
+Navbatda: <b>{queue}</b>
+Bugun: <b>{today}</b>
+Kanallar: <b>{channels}</b>"""
     },
     'ru': {
         'welcome': "🌟 <b>Добро пожаловать!</b>\n\nЯ твой профессиональный менеджер Minecraft-канала. Отправь мне данные для нового поста!",
@@ -37,7 +44,14 @@ MESSAGES = {
         'ad_added': "✅ Реклама добавлена",
         'no_draft': "⚠️ Черновик пуст",
         'reply_info': "ℹ️ Чтобы прикрепить файл к посту, ответь (Reply) этим файлом на превью поста.",
-        'analyzing': "🔍 <b>Анализирую...</b>"
+        'analyzing': "🔍 <b>Анализирую...</b>",
+        'stats': """📊 <b>Статистика</b>
+
+Всего постов: <b>{total}</b>
+Опубликовано: <b>{published}</b>
+В очереди: <b>{queue}</b>
+За сегодня: <b>{today}</b>
+Каналов: <b>{channels}</b>"""
     },
     'en': {
         'welcome': "🌟 <b>Welcome!</b>\n\nI am your professional Minecraft channel manager. Send me data for a new post!",
@@ -57,7 +71,14 @@ MESSAGES = {
         'ad_added': "✅ Ad added",
         'no_draft': "⚠️ Draft is empty",
         'reply_info': "ℹ️ To attach a file, reply to this preview with a file.",
-        'analyzing': "🔍 <b>Analyzing...</b>"
+        'analyzing': "🔍 <b>Analyzing...</b>",
+        'stats': """📊 <b>Statistics</b>
+
+Total posts: <b>{total}</b>
+Published: <b>{published}</b>
+In queue: <b>{queue}</b>
+Today: <b>{today}</b>
+Channels: <b>{channels}</b>"""
     }
 }
 

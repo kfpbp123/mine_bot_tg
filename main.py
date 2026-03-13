@@ -118,11 +118,15 @@ def handle_text_photo_file(message):
             bot.send_message(chat_id, MESSAGES[lang]['ai_chat_active'], reply_markup=markups.get_cancel_markup(lang), parse_mode='HTML')
         elif text in [BUTTONS['uz']['lang'], BUTTONS['ru']['lang'], BUTTONS['en']['lang']]:
             bot.send_message(chat_id, MESSAGES[lang]['choose_lang'], reply_markup=markups.get_language_menu(), parse_mode='HTML')
+        elif text in [BUTTONS['uz']['channels'], BUTTONS['ru']['channels'], BUTTONS['en']['channels']]:
+            channels = utils.get_channels()
+            active = utils.get_active_channel(user_id)
+            bot.send_message(chat_id, f"📢 <b>{BUTTONS[lang]['channels']}:</b>", reply_markup=markups.get_channels_markup(channels, active), parse_mode='HTML')
         elif text in [BUTTONS['uz']['queue'], BUTTONS['ru']['queue'], BUTTONS['en']['queue']]:
             bot.send_chat_action(chat_id, 'typing')
             show_queue_page(chat_id, 0)
         elif text in [BUTTONS['uz']['stats'], BUTTONS['ru']['stats'], BUTTONS['en']['stats']]:
-            core.show_stats(chat_id, len(utils.get_channels()))
+            core.show_stats(chat_id, len(utils.get_channels()), lang)
         elif text in [BUTTONS['uz']['settings'], BUTTONS['ru']['settings'], BUTTONS['en']['settings']]:
             bot.send_message(chat_id, MESSAGES[lang]['settings'], reply_markup=markups.get_settings_menu(lang), parse_mode='HTML')
         elif text in [BUTTONS['uz']['analyze'], BUTTONS['ru']['analyze'], BUTTONS['en']['analyze']]:

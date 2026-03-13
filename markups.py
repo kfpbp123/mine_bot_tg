@@ -22,6 +22,14 @@ def get_settings_menu(lang='uz'):
     markup.add(InlineKeyboardButton("📥 Export CSV", callback_data="csv_export"))
     return markup
 
+def get_channels_markup(channels, active_channel):
+    markup = InlineKeyboardMarkup(row_width=1)
+    for ch in channels:
+        status = "✅ " if ch == active_channel else ""
+        markup.add(InlineKeyboardButton(f"{status}{ch}", callback_data=f"set_channel_{ch}"))
+    markup.add(InlineKeyboardButton("➕ Add New", callback_data="add_new_channel"))
+    return markup
+
 def get_language_menu():
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(

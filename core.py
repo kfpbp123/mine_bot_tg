@@ -4,6 +4,7 @@ import database
 import os
 import time
 from bot_instance import bot
+from strings import MESSAGES
 
 def publish_post_data(post_id, photo_id, text, document_id, channel_id, is_auto=False):
     try:
@@ -44,13 +45,13 @@ def process_queue():
         target_channel = channel_id if channel_id else config.DEFAULT_CHANNEL
         publish_post_data(post_id, photo_id, text, document_id, target_channel, is_auto=True)
 
-def show_stats(chat_id, channels_count):
+def show_stats(chat_id, channels_count, lang='uz'):
     stats = database.get_stats()
-    text = f"""📊 <b>Статистика</b>
-
-Всего постов: <b>{stats['total']}</b>
-Опубликовано: <b>{stats['published']}</b>
-В очереди: <b>{stats['queue']}</b>
-За сегодня: <b>{stats['today']}</b>
-Каналов: <b>{channels_count}</b>"""
+    text = MESSAGES[lang]['stats'].format(
+        total=stats['total'],
+        published=stats['published'],
+        queue=stats['queue'],
+        today=stats['today'],
+        channels=channels_count
+    )
     bot.send_message(chat_id, text, parse_mode='HTML')

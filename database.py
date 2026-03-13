@@ -1,8 +1,11 @@
 import sqlite3
 import time
+import os
+
+DB_PATH = os.getenv("DB_PATH", "bot_data.db")
 
 def init_db():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     # Основная таблица очереди и постов
     c.execute('''CREATE TABLE IF NOT EXISTS queue
@@ -42,7 +45,7 @@ def init_db():
 # --- ФУНКЦИИ ОЧЕРЕДИ ---
 
 def add_to_queue(photo_id, text, document_id=None, channel_id=None, scheduled_time=None):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("INSERT INTO queue (photo_id, text, document_id, channel_id, scheduled_time, status) VALUES (?, ?, ?, ?, ?, 'pending')", 
               (photo_id, text, document_id, channel_id, scheduled_time))
@@ -50,7 +53,7 @@ def add_to_queue(photo_id, text, document_id=None, channel_id=None, scheduled_ti
     conn.close()
 
 def get_ready_posts():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     current_time = int(time.time())
     c.execute('''SELECT id, photo_id, text, document_id, channel_id 
@@ -62,28 +65,28 @@ def get_ready_posts():
     return rows
 
 def mark_as_posted(post_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE queue SET status = 'posted' WHERE id = ?", (post_id,))
     conn.commit()
     conn.close()
 
 def update_post_text(post_id, new_text):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE queue SET text = ? WHERE id = ?", (new_text, post_id))
     conn.commit()
     conn.close()
 
 def update_post_time(post_id, new_time):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE queue SET scheduled_time = ? WHERE id = ?", (new_time, post_id))
     conn.commit()
     conn.close()
 
 def get_all_pending():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT id, photo_id, text, document_id, channel_id, scheduled_time FROM queue WHERE status='pending' ORDER BY scheduled_time ASC")
     rows = c.fetchall()
@@ -91,14 +94,14 @@ def get_all_pending():
     return rows
 
 def delete_from_queue(post_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM queue WHERE id=?", (post_id,))
     conn.commit()
     conn.close()
 
 def get_last_scheduled_time():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT scheduled_time FROM queue WHERE status='pending' AND scheduled_time IS NOT NULL ORDER BY scheduled_time DESC LIMIT 1")
     result = c.fetchone()
@@ -108,7 +111,7 @@ def get_last_scheduled_time():
 # --- ФУНКЦИИ НАСТРОЕК И ЧЕРНОВИКОВ (ДОЛГАЯ ПАМЯТЬ) ---
 
 def set_user_setting(user_id, lang=None, channel=None):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     if lang:
         c.execute("INSERT INTO user_settings (user_id, lang) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET lang=?", (user_id, lang, lang))
@@ -118,7 +121,7 @@ def set_user_setting(user_id, lang=None, channel=None):
     conn.close()
 
 def get_user_settings(user_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT lang, active_channel FROM user_settings WHERE user_id = ?", (user_id,))
     row = c.fetchone()
@@ -126,7 +129,7 @@ def get_user_settings(user_id):
     return row if row else ('uz', None)
 
 def save_draft(user_id, photo_id, text, document_id, channel_id, ad_added=0):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''INSERT INTO drafts (user_id, photo_id, text, document_id, channel_id, ad_added) 
                  VALUES (?, ?, ?, ?, ?, ?) 
@@ -139,7 +142,7 @@ def save_draft(user_id, photo_id, text, document_id, channel_id, ad_added=0):
     conn.close()
 
 def get_draft(user_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT photo_id, text, document_id, channel_id, ad_added FROM drafts WHERE user_id = ?", (user_id,))
     row = c.fetchone()
@@ -149,7 +152,7 @@ def get_draft(user_id):
     return None
 
 def clear_draft(user_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM drafts WHERE user_id = ?", (user_id,))
     conn.commit()
@@ -160,7 +163,7 @@ def clear_draft(user_id):
 def get_stats():
     import pytz
     from datetime import datetime
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM queue")
     total = c.fetchone()[0]
@@ -176,7 +179,7 @@ def get_stats():
     return {'total': total, 'published': published, 'queue': queue_count, 'today': today}
 
 def get_all_posts():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM queue")
     rows = c.fetchall()
@@ -184,7 +187,7 @@ def get_all_posts():
     return rows
 
 def record_published_post(photo_id, text, document_id, channel_id):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     current_time = int(time.time())
     c.execute("INSERT INTO queue (photo_id, text, document_id, channel_id, scheduled_time, status) VALUES (?, ?, ?, ?, ?, 'posted')", 
@@ -193,7 +196,7 @@ def record_published_post(photo_id, text, document_id, channel_id):
     conn.close()
 
 def save_comment(user_name, text, timestamp):
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("INSERT INTO comments (user_name, text, timestamp) VALUES (?, ?, ?)", 
               (user_name, text, timestamp))
@@ -201,7 +204,7 @@ def save_comment(user_name, text, timestamp):
     conn.close()
 
 def get_all_comments():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT user_name, text FROM comments ORDER BY timestamp ASC")
     rows = c.fetchall()
@@ -209,7 +212,7 @@ def get_all_comments():
     return rows
 
 def clear_comments():
-    conn = sqlite3.connect('bot_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM comments")
     conn.commit()

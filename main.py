@@ -16,6 +16,7 @@ import core
 import pytz
 from datetime import datetime, timedelta
 from bot_instance import bot
+from strings import MESSAGES, BUTTONS
 
 database.init_db()
 album_cache = {}
@@ -28,10 +29,16 @@ if not scheduler.get_job('queue_process'):
     scheduler.add_job(core.process_queue, 'interval', minutes=1, id='queue_process', replace_existing=True)
 scheduler.start()
 
+def get_user_lang(user_id):
+    lang, _ = database.get_user_settings(user_id)
+    return lang or 'uz'
+
 def show_queue_page(chat_id, page, message_id=None):
+    user_id = chat_id # В личке совпадает
+    lang = get_user_lang(user_id)
     posts = database.get_all_pending()
     if not posts:
-        text = "━━━━━━━━━━━━━\n📭 <b>Очередь пуста</b>\n━━━━━━━━━━━━━"
+        text = MESSAGES[lang]['queue_empty']
         if message_id: bot.edit_message_text(text, chat_id, message_id, parse_mode='HTML')
         else: bot.send_message(chat_id, text, parse_mode='HTML')
         return
@@ -39,7 +46,7 @@ def show_queue_page(chat_id, page, message_id=None):
     if page < 0: page = 0
     post = posts[page]
     msg_text = utils.format_queue_post(post, page + 1, len(posts))
-    markup = markups.get_queue_manage_markup(post[0], page)
+    markup = markups.get_queue_manage_markup(post[0], page, lang)
     if message_id:
         try: bot.edit_message_text(msg_text, chat_id, message_id, parse_mode='HTML', reply_markup=markup)
         except: pass
@@ -48,21 +55,24 @@ def show_queue_page(chat_id, page, message_id=None):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     if message.chat.type != 'private': return
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
     user_states[message.chat.id] = None
-    greeting = utils.get_time_greeting()
-    bot.send_message(message.chat.id, f"🌟 <b>{greeting}!</b>\n\nЯ твой профессиональный менеджер Minecraft-канала. Отправь мне данные для нового поста!", reply_markup=markups.get_main_menu(), parse_mode='HTML')
+    text = MESSAGES[lang]['welcome']
+    bot.send_message(message.chat.id, text, reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
 
 @bot.message_handler(content_types=['text', 'photo', 'document', 'video', 'audio'])
 def handle_text_photo_file(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
+    lang = get_user_lang(user_id)
 
     if message.chat.type in ['group', 'supergroup']:
         if message.text and not message.text.startswith('/'):
             database.save_comment(message.from_user.first_name, message.text, int(time.time()))
         return
 
-    # --- ОБРАБОТКА REPLY (ПРИКРЕПЛЕНИЕ ФАЙЛОВ) ---
+    # --- ОБРАБОТКА REPLY ---
     if message.reply_to_message:
         file_id = None
         if message.document: file_id = message.document.file_id
@@ -74,54 +84,52 @@ def handle_text_photo_file(message):
             bot.send_chat_action(chat_id, 'upload_document')
             draft = database.get_draft(user_id)
             if draft:
-                if message.photo:
-                    draft['photo'] = file_id
-                else:
-                    draft['document'] = file_id
+                if message.photo: draft['photo'] = file_id
+                else: draft['document'] = file_id
                 database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1 if draft.get('ad_added') else 0)
-                bot.reply_to(message, "✅ Файл успешно прикреплен к посту!")
+                bot.reply_to(message, MESSAGES[lang]['file_attached'])
                 send_draft_preview(chat_id, draft)
                 return
 
     state_data = user_states.get(chat_id)
     if state_data and state_data.get('state') == 'ai_chat':
-        if message.text == "❌ Отмена":
+        if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]:
             user_states[chat_id] = None
-            bot.send_message(chat_id, "🔌 <b>Связь с ИИ разорвана.</b>", reply_markup=markups.get_main_menu(), parse_mode='HTML')
+            bot.send_message(chat_id, MESSAGES[lang]['ai_chat_off'], reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
             return
         bot.send_chat_action(chat_id, 'typing')
-        response = ai_generator.chat_with_ai(message.text)
-        bot.send_message(chat_id, f"🤖 <b>ИИ:</b>\n\n{response}", parse_mode='HTML', reply_markup=markups.get_cancel_markup())
+        response = ai_generator.chat_with_ai(message.text, lang)
+        bot.send_message(chat_id, f"🤖 <b>AI:</b>\n\n{response}", parse_mode='HTML', reply_markup=markups.get_cancel_markup(lang))
         return
 
     if message.content_type == 'text':
         text = message.text
-        if text == "➕ Создать пост":
-            bot.send_message(chat_id, "📬 <b>Отправь мне ссылку или описание мода.</b>", parse_mode='HTML')
-        elif text == "🤖 Чат с ИИ":
+        # Проверка кнопок на всех языках
+        if text in [BUTTONS['uz']['create'], BUTTONS['ru']['create'], BUTTONS['en']['create']]:
+            bot.send_message(chat_id, "📬 <b>Link / Info?</b>", parse_mode='HTML')
+        elif text in [BUTTONS['uz']['ai_chat'], BUTTONS['ru']['ai_chat'], BUTTONS['en']['ai_chat']]:
             user_states[chat_id] = {'state': 'ai_chat'}
-            bot.send_message(chat_id, "🧠 <b>Режим прямого общения с ИИ активирован.</b>", reply_markup=markups.get_cancel_markup(), parse_mode='HTML')
-        elif text == "🌍 Язык":
-            lang, _ = database.get_user_settings(user_id)
-            bot.send_message(chat_id, f"🌐 <b>Текущий язык: {lang.upper()}</b>", reply_markup=markups.get_language_menu(), parse_mode='HTML')
-        elif text == "📋 Очередь":
+            bot.send_message(chat_id, MESSAGES[lang]['ai_chat_active'], reply_markup=markups.get_cancel_markup(lang), parse_mode='HTML')
+        elif text in [BUTTONS['uz']['lang'], BUTTONS['ru']['lang'], BUTTONS['en']['lang']]:
+            bot.send_message(chat_id, MESSAGES[lang]['choose_lang'], reply_markup=markups.get_language_menu(), parse_mode='HTML')
+        elif text in [BUTTONS['uz']['queue'], BUTTONS['ru']['queue'], BUTTONS['en']['queue']]:
             bot.send_chat_action(chat_id, 'typing')
             show_queue_page(chat_id, 0)
-        elif text == "📊 Статистика":
+        elif text in [BUTTONS['uz']['stats'], BUTTONS['ru']['stats'], BUTTONS['en']['stats']]:
             core.show_stats(chat_id, len(utils.get_channels()))
-        elif text == "⚙️ Настройки":
-            bot.send_message(chat_id, "🛠 <b>Настройки:</b>", reply_markup=markups.get_settings_menu(), parse_mode='HTML')
-        elif text == "🧐 Анализ":
+        elif text in [BUTTONS['uz']['settings'], BUTTONS['ru']['settings'], BUTTONS['en']['settings']]:
+            bot.send_message(chat_id, MESSAGES[lang]['settings'], reply_markup=markups.get_settings_menu(lang), parse_mode='HTML')
+        elif text in [BUTTONS['uz']['analyze'], BUTTONS['ru']['analyze'], BUTTONS['en']['analyze']]:
             bot.send_chat_action(chat_id, 'typing')
-            msg = bot.send_message(chat_id, "🔍 <b>Анализирую...</b>", parse_mode='HTML')
+            msg = bot.send_message(chat_id, MESSAGES[lang]['analyzing'], parse_mode='HTML')
             report = comments_analyzer.analyze_comments()
             bot.delete_message(chat_id, msg.message_id)
             markup = telebot.types.InlineKeyboardMarkup()
-            markup.add(telebot.types.InlineKeyboardButton("🗑 Очистить", callback_data="clear_comments_db"))
+            markup.add(telebot.types.InlineKeyboardButton("🗑 Clear", callback_data="clear_comments_db"))
             bot.send_message(chat_id, report, parse_mode="HTML", reply_markup=markup)
-        elif text == "❌ Отмена":
+        elif text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]:
             user_states[chat_id] = None
-            bot.send_message(chat_id, "🏠 <b>Главное меню</b>", reply_markup=markups.get_main_menu(), parse_mode='HTML')
+            bot.send_message(chat_id, "🏠", reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
         else:
             bot.send_chat_action(chat_id, 'typing')
             if not message.media_group_id:
@@ -148,10 +156,10 @@ def process_album_immediate(media_group_id, chat_id, user_id):
     start_generation(chat_id, user_id, caption, photo_ids, is_album=True)
 
 def start_generation(chat_id, user_id, user_input, photo_id, is_album=False):
-    msg = bot.send_message(chat_id, "🤖 <b>Нейросеть пишет пост...</b>", parse_mode='HTML')
-    lang, _ = database.get_user_settings(user_id)
+    lang = get_user_lang(user_id)
+    msg = bot.send_message(chat_id, MESSAGES[lang]['generation_start'], parse_mode='HTML')
     
-    generated_text = ai_generator.generate_post(user_input or "Minecraft контент", persona=lang)
+    generated_text = ai_generator.generate_post(user_input or "Minecraft", persona=lang)
     bot.delete_message(chat_id, msg.message_id)
     
     final_photo_id = photo_id
@@ -173,8 +181,10 @@ def start_generation(chat_id, user_id, user_input, photo_id, is_album=False):
     send_draft_preview(chat_id, draft)
 
 def send_draft_preview(chat_id, draft):
+    user_id = chat_id
+    lang = get_user_lang(user_id)
     bot.send_chat_action(chat_id, 'typing')
-    doc_info = f"\n\n📄 <b>Прикреплен файл:</b> Да" if draft.get('document') else ""
+    doc_info = f"\n\n📄 <b>File:</b> Yes" if draft.get('document') else ""
     full_text = draft['text'] + doc_info
     
     if draft['photo'] and ',' in draft['photo']:
@@ -189,16 +199,19 @@ def send_draft_preview(chat_id, draft):
     else: 
         sent = bot.send_message(chat_id, full_text, parse_mode='HTML')
     
-    bot.edit_message_reply_markup(chat_id, sent.message_id, reply_markup=markups.get_draft_markup(sent.message_id))
+    bot.edit_message_reply_markup(chat_id, sent.message_id, reply_markup=markups.get_draft_markup(lang))
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     chat_id, user_id = call.message.chat.id, call.from_user.id
+    lang = get_user_lang(user_id)
     
     if call.data.startswith('set_lang_'):
-        database.set_user_setting(user_id, lang=call.data.replace('set_lang_', ''))
-        bot.answer_callback_query(call.id, "✅ Язык изменен")
+        new_lang = call.data.replace('set_lang_', '')
+        database.set_user_setting(user_id, lang=new_lang)
+        bot.answer_callback_query(call.id, "✅ Done")
         bot.delete_message(chat_id, call.message.message_id)
+        bot.send_message(chat_id, MESSAGES[new_lang]['welcome'], reply_markup=markups.get_main_menu(new_lang), parse_mode='HTML')
     
     elif call.data == "csv_export":
         filename, _ = utils.generate_csv_export()
@@ -211,11 +224,11 @@ def callback_handler(call):
             with open('bot_data.db', 'rb') as f: bot.send_document(chat_id, f)
 
     elif call.data == "set_ad_text":
-        msg = bot.send_message(chat_id, "📝 Введи текст рекламы:", reply_markup=markups.get_cancel_markup())
+        msg = bot.send_message(chat_id, MESSAGES[lang]['enter_ad'], reply_markup=markups.get_cancel_markup(lang))
         bot.register_next_step_handler(msg, process_ad_step)
 
     elif call.data == "add_new_channel":
-        msg = bot.send_message(chat_id, "📢 Введи @username канала:", reply_markup=markups.get_cancel_markup())
+        msg = bot.send_message(chat_id, MESSAGES[lang]['enter_channel'], reply_markup=markups.get_cancel_markup(lang))
         bot.register_next_step_handler(msg, process_add_channel_step)
 
     elif call.data.startswith('set_channel_'):
@@ -228,25 +241,28 @@ def callback_handler(call):
         if action == 'page': show_queue_page(chat_id, val, call.message.message_id)
         elif action == 'del': database.delete_from_queue(val); show_queue_page(chat_id, 0, call.message.message_id)
         elif action == 'edit':
-            msg = bot.send_message(chat_id, "📝 Введи новый текст:", reply_markup=markups.get_cancel_markup())
+            msg = bot.send_message(chat_id, MESSAGES[lang]['enter_new_text'], reply_markup=markups.get_cancel_markup(lang))
             bot.register_next_step_handler(msg, save_edited_text, None, chat_id, True, val)
         elif action == 'pub':
             post = next((p for p in database.get_all_pending() if p[0] == val), None)
             if post and core.publish_post_data(post[0], post[1], post[2], post[3], post[4] or config.DEFAULT_CHANNEL):
                 show_queue_page(chat_id, 0, call.message.message_id)
         elif action == 'time':
-            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(val, "qtime_"))
+            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(val, "qtime_", lang))
 
-    elif call.data == "rewrite_menu": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_rewrite_menu())
+    elif call.data == "rewrite_menu": 
+        bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_rewrite_menu(lang))
+    
     elif call.data.startswith("rw_"):
         draft = database.get_draft(user_id)
         if draft:
-            draft['text'] = ai_generator.rewrite_post(draft['text'], call.data.split("_")[1])
-            database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'])
+            bot.send_chat_action(chat_id, 'typing')
+            draft['text'] = ai_generator.rewrite_post(draft['text'], call.data.split("_")[1], lang)
+            database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1 if draft.get('ad_added') else 0)
             finalize_draft_update(chat_id, call.message.message_id, draft)
 
     elif call.data == "edit_text":
-        msg = bot.send_message(chat_id, "📝 Введи новый текст для поста:", reply_markup=markups.get_cancel_markup())
+        msg = bot.send_message(chat_id, MESSAGES[lang]['enter_new_text'], reply_markup=markups.get_cancel_markup(lang))
         bot.register_next_step_handler(msg, save_edited_text, call.message.message_id, chat_id)
 
     elif call.data == "add_to_smart_q":
@@ -255,15 +271,10 @@ def callback_handler(call):
             last_time = database.get_last_scheduled_time()
             now = int(time.time())
             interval = config.SMART_QUEUE_INTERVAL_HOURS * 3600
-            
-            if not last_time or last_time < now:
-                new_time = now + 3600 
-            else:
-                new_time = last_time + interval
-            
+            new_time = (last_time + interval) if (last_time and last_time > now) else (now + 3600)
             database.add_to_queue(draft['photo'], draft['text'], draft['document'], draft['channel'], new_time)
             database.clear_draft(user_id)
-            bot.answer_callback_query(call.id, f"✅ Добавлено в умную очередь на {datetime.fromtimestamp(new_time).strftime('%d.%m %H:%M')}")
+            bot.answer_callback_query(call.id, MESSAGES[lang]['smart_queue_done'] + datetime.fromtimestamp(new_time).strftime('%d.%m %H:%M'))
             bot.delete_message(chat_id, call.message.message_id)
 
     elif call.data == "add_ad":
@@ -271,12 +282,9 @@ def callback_handler(call):
         draft = database.get_draft(user_id)
         if draft and not draft.get('ad_added'):
             draft['text'] += f"\n\n{ad_text}"
-            draft['ad_added'] = True
             database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1)
             finalize_draft_update(chat_id, call.message.message_id, draft)
-            bot.answer_callback_query(call.id, "✅ Реклама добавлена")
-        else:
-            bot.answer_callback_query(call.id, "⚠️ Реклама уже есть или черновик пуст")
+            bot.answer_callback_query(call.id, MESSAGES[lang]['ad_added'])
 
     elif call.data == "pub_now":
         draft = database.get_draft(user_id)
@@ -285,38 +293,51 @@ def callback_handler(call):
             database.clear_draft(user_id)
             bot.delete_message(chat_id, call.message.message_id)
 
-    elif call.data == "pub_queue_menu": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(call.message.message_id))
-    elif call.data == "back_to_draft": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_draft_markup(call.message.message_id))
-    elif call.data == "cancel_action": bot.delete_message(chat_id, call.message.message_id)
+    elif call.data == "pub_queue_menu": 
+        bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(call.message.message_id, lang=lang))
+    elif call.data == "back_to_draft": 
+        bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_draft_markup(lang))
+    elif call.data == "cancel_action": 
+        bot.delete_message(chat_id, call.message.message_id)
 
 def finalize_draft_update(chat_id, message_id, draft):
-    try: bot.edit_message_text(draft['text'], chat_id, message_id, parse_mode='HTML', reply_markup=markups.get_draft_markup(message_id))
+    lang = get_user_lang(chat_id)
+    doc_info = f"\n\n📄 <b>File:</b> Yes" if draft.get('document') else ""
+    full_text = draft['text'] + doc_info
+    try: bot.edit_message_text(full_text, chat_id, message_id, parse_mode='HTML', reply_markup=markups.get_draft_markup(lang))
     except:
-        try: bot.edit_message_caption(draft['text'], chat_id, message_id, parse_mode='HTML', reply_markup=markups.get_draft_markup(message_id))
+        try: bot.edit_message_caption(full_text, chat_id, message_id, parse_mode='HTML', reply_markup=markups.get_draft_markup(lang))
         except: pass
 
 def process_ad_step(message):
-    if message.text == "❌ Отмена": return
+    lang = get_user_lang(message.from_user.id)
+    if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]: return
     utils.save_ad_text(message.text)
-    bot.send_message(message.chat.id, "✅ Реклама сохранена!", reply_markup=markups.get_main_menu())
+    bot.send_message(message.chat.id, MESSAGES[lang]['ad_saved'], reply_markup=markups.get_main_menu(lang))
 
 def process_add_channel_step(message):
-    if message.text == "❌ Отмена": return
+    lang = get_user_lang(message.from_user.id)
+    if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]: return
     new_ch = message.text.strip()
     if not new_ch.startswith('@'): new_ch = '@' + new_ch
     with open("channels.txt", "a", encoding="utf-8") as f: f.write(new_ch + "\n")
-    bot.send_message(message.chat.id, f"✅ Канал {new_ch} добавлен!", reply_markup=markups.get_main_menu())
+    bot.send_message(message.chat.id, MESSAGES[lang]['channel_added'], reply_markup=markups.get_main_menu(lang))
 
 def save_edited_text(message, target_id, chat_id, is_queue=False, post_id=None):
-    if message.text == "❌ Отмена": return
+    user_id = message.from_user.id
+    lang = get_user_lang(user_id)
+    if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]: return
+    
     if is_queue:
         database.update_post_text(post_id, message.text)
         show_queue_page(chat_id, 0)
     else:
-        draft = database.get_draft(message.from_user.id)
+        draft = database.get_draft(user_id)
         if draft:
-            draft['text'] = message.text
-            database.save_draft(message.from_user.id, draft['photo'], draft['text'], draft['document'], draft['channel'])
+            # Отправляем новый текст на рерайт "красивое оформление", но с сохранением смысла пользователя
+            bot.send_chat_action(chat_id, 'typing')
+            draft['text'] = ai_generator.rewrite_post(message.text, "pro", lang)
+            database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1 if draft.get('ad_added') else 0)
             send_draft_preview(chat_id, draft)
 
 bot.polling(none_stop=True)

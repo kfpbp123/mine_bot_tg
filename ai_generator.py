@@ -168,8 +168,9 @@ def generate_post(user_input, persona="uz"):
     except Exception as e:
         return f"❌ Gemini error: {e}"
 
-def rewrite_post(text, style="short"):
-    prompt = f"Перепиши этот текст в стиле {style}, сохранив HTML: {text}"
+def rewrite_post(text, style="short", persona="uz"):
+    lang_instruction = "uzbek (latin)" if persona == "uz" else "russian" if persona == "ru" else "english"
+    prompt = f"Rewrite this text in {style} style, keeping HTML tags and using {lang_instruction} language: {text}"
     try:
         if config.AI_PROVIDER == "groq":
             completion = groq_client.chat.completions.create(
@@ -184,8 +185,9 @@ def rewrite_post(text, style="short"):
         return re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', res)
     except: return text
 
-def chat_with_ai(user_message):
-    prompt = f"Ты помощник админа. Запоминай контекст и личные данны. Отвечай кратко: {user_message}"
+def chat_with_ai(user_message, persona="uz"):
+    lang_instruction = "uzbek (latin)" if persona == "uz" else "russian" if persona == "ru" else "english"
+    prompt = f"You are a helpful assistant. Answer shortly in {lang_instruction}: {user_message}"
     try:
         if config.AI_PROVIDER == "groq":
             completion = groq_client.chat.completions.create(
@@ -196,4 +198,4 @@ def chat_with_ai(user_message):
         else:
             response = gemini_model.generate_content(prompt)
             return response.text.strip()
-    except: return "Ошибка чата."
+    except: return "Error."

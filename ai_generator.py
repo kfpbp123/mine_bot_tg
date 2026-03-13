@@ -5,92 +5,63 @@ import requests
 from bs4 import BeautifulSoup
 
 client = genai.Client(api_key=config.GEMINI_KEY)
-MODEL_ID = "gemini-2.5-flash"
+MODEL_ID = "gemini-2.0-flash"
 
 PROMPTS = {
-    "uz": """Ты — креативный редактор Telegram-канала о модах для Minecraft.
-Я передам тебе текст. Вычлени главное и напиши пост. Уложись в 800 символов.
-Пиши ТОЛЬКО на узбекском латинице. Если не смог найти версию напиши "1.21+".
-Используй тег <blockquote expandable> для основного блока. Перепиши текст в более веселом, драйвовом и геймерском стиле. Добавь чуть больше эмодзи.
+    "uz": "Siz Minecraft modlari haqidagi Telegram kanali uchun kreativ muharrirsiz. Faqat o'zbek tilida (lotin alifbosida) javob bering.",
+    "ru": "Вы профессиональный редактор Telegram-канала о Minecraft. Пишите только на русском языке. Используйте геймерский сленг, но оставайтесь понятным.",
+    "en": "You are a creative editor for a Minecraft community Telegram channel. Write only in English."
+}
 
-Формат:
+TEMPLATES = {
+    "standard": """
 📦 <b>[Название]</b>
 
-<blockquote expandable><b>Bu nima?</b>
+<blockquote expandable><b>Что это? / Bu nima?</b>
 [Описание]
 
-<b>Asosiy xususiyatlar:</b>
+<b>Фишки / Xususiyatlar:</b>
 • [Фишка 1]
 • [Фишка 2]
 
-🎮 Versiya: [Версия]</blockquote>
+🎮 Версия / Versiya: [Версия]</blockquote>
 
-<blockquote>💖 - zo`r
-💔 - Unchamas</blockquote>
+<blockquote>💖 - Лайк
+💔 - Не очень</blockquote>
 
-#Minecraft #[Категория]
+#Minecraft #[Категория]""",
 
-ПРАВИЛА ДЛЯ ХЭШТЕГОВ (КРИТИЧЕСКИ ВАЖНО):
-1. Внимательно проанализируй, о чем пост. Выбери строго ОДНУ категорию и напиши её хэштег: #Mods, #Maps, #Textures или #Shaders.
-2. В конце поста должно быть ровно ДВА хэштега: #Minecraft и хэштег выбранной категории.
-3. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать название мода в виде хэштега! Не придумывай свои слова для хэштегов!
-""",
+    "list": """
+🔥 <b>[Название]: ТОП ФИШЕК</b>
 
-    "ru": """Ты — креативный редактор Telegram-канала о модах для Minecraft.
-Я передам тебе текст. Вычлени главное и напиши пост в драйвовом и веселом стиле. Уложись в 800 символов.
-Пиши ТОЛЬКО на русском языке.
-Используй тег <blockquote expandable> для основного блока.
+<blockquote expandable>
+1️⃣ [Фишка 1]
+2️⃣ [Фишка 2]
+3️⃣ [Фишка 3]
+4️⃣ [Фишка 4]
 
-Формат:
-📦 <b>[Название]</b>
+🎮 Версия / Versiya: [Версия]
+</blockquote>
 
-<blockquote expandable><b>Что это такое?</b>
-[Описание]
+#Minecraft #[Категория]""",
 
-<b>Главные фишки:</b>
-• [Фишка 1]
-• [Фишка 2]
+    "review": """
+🧐 <b>ОБЗОР: [Название]</b>
 
-🎮 Версия: [Версия]</blockquote>
+<blockquote expandable>
+[Краткое мнение о контенте]
 
-<blockquote>💖 - Имба
-💔 - Не оч</blockquote>
+✅ <b>Плюсы:</b>
+- [Плюс 1]
+- [Плюс 2]
 
-#Minecraft #[Категория]
+❌ <b>Минусы:</b>
+- [Минус 1]
 
-ПРАВИЛА ДЛЯ ХЭШТЕГОВ (КРИТИЧЕСКИ ВАЖНО):
-1. Внимательно проанализируй, о чем пост. Выбери строго ОДНУ категорию и напиши её хэштег на русском: #Моды, #Карты, #Текстуры или #Шейдеры.
-2. В конце поста должно быть ровно ДВА хэштега: #Minecraft и хэштег выбранной категории.
-3. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать название мода в виде хэштега! Не придумывай свои слова для хэштегов!
-""",
+🎮 Версия / Versiya: [Версия]
+</blockquote>
 
-    "en": """You are a creative editor for a Minecraft mods Telegram channel.
-Extract the main points and write an engaging post. Keep it under 800 characters.
-Write ONLY in English in an exciting tone.
-Use the <blockquote expandable> tag for the main body.
-
-Format:
-📦 <b>[Mod Name]</b>
-
-<blockquote expandable><b>What is it?</b>
-[Description]
-
-<b>Key Features:</b>
-• [Feature 1]
-• [Feature 2]
-
-🎮 Version: [Version]</blockquote>
-
-<blockquote>💖 - Awesome
-💔 - Not great</blockquote>
-
-#Minecraft #[Category]
-
-HASHTAG RULES (CRITICAL):
-1. Analyze the content and choose exactly ONE category hashtag from this list: #Mods, #Maps, #Textures, or #Shaders.
-2. The post must end with exactly two hashtags: #Minecraft and the chosen category hashtag.
-3. NEVER use the mod's name as a hashtag! Do not invent your own hashtags!
-"""
+#Minecraft #[Категория]"""
 }
 
 def extract_url(text):
@@ -102,99 +73,44 @@ def fetch_page_content(url):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
-        return text[:5000] 
-    except Exception as e:
-        print(f"⚠️ Не смог прочитать сайт {url}: {e}")
-        return ""
-
-TEMPLATES = {
-    "standard": """
-📦 <b>[Название]</b>
-
-<blockquote expandable><b>Bu nima?</b>
-[Описание]
-
-<b>Asosiy xususiyatlar:</b>
-• [Фишка 1]
-• [Фишка 2]
-
-🎮 Versiya: [Версия]</blockquote>
-
-<blockquote>💖 - zo`r
-💔 - Unchamas</blockquote>
-""",
-    "list": """
-🔥 <b>[Название]: ТОП ФИШЕК</b>
-
-<blockquote expandable>
-1️⃣ [Фишка 1]
-2️⃣ [Фишка 2]
-3️⃣ [Фишка 3]
-4️⃣ [Фишка 4]
-
-🎮 Поддерживает: [Версия]
-</blockquote>
-""",
-    "review": """
-🧐 <b>ОБЗОР: [Название]</b>
-
-<blockquote expandable>
-[Текст подробного обзора мода или карты, выделяющий атмосферу и геймплейные изменения.]
-
-✅ Плюсы: [Плюс]
-❌ Минусы: [Минус]
-
-🎮 Версия: [Версия]
-</blockquote>
-"""
-}
+        return soup.get_text(separator=' ', strip=True)[:5000]
+    except: return ""
 
 def generate_post(user_input, persona="uz", template="standard"):
     url = extract_url(user_input)
-    site_context = ""
+    site_content = fetch_page_content(url) if url else ""
     
-    if url:
-        page_text = fetch_page_content(url)
-
     selected_prompt = PROMPTS.get(persona, PROMPTS["uz"])
     selected_template = TEMPLATES.get(template, TEMPLATES["standard"])
     
-    prompt = f"{selected_prompt}\n\nИСПОЛЬЗУЙ ЭТОТ ШАБЛОН:\n{selected_template}\n\nСырая информация от пользователя:\n{user_input}{site_context}"
-    response = client.models.generate_content(model=MODEL_ID, contents=prompt)
-    
-    final_text = response.text.strip()
-    final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
-    
-    return final_text
-
-def rewrite_post(text, style="short"):
-    styles = {
-        "short": "Сделай текст максимально коротким и лаконичнее. Оставь только самую суть, убери лишнюю воду.",
-        "fun": "Перепиши текст в более веселом, драйвовом и геймерском стиле. Добавь чуть больше эмодзи.",
-        "pro": "Сделай текст более профессиональным, строгим и информативным.",
-        "scientist": "Перепиши текст как сумасшедший ученый. Используй сложные термины, аналитический тон и псевдонаучные выводы.",
-        "boring": "Сделай текст максимально нудным, затянутым и бесполезно подробным. Минимум эмоций."
-    }
-    prompt_instruction = styles.get(style, "Улучши этот текст.")
-    prompt = f"{prompt_instruction}\n\nВАЖНО: Сохрани HTML-теги форматирования (<b>, <blockquote>) и все хэштеги в конце.\n\nОригинальный текст:\n{text}"
+    full_prompt = f"{selected_prompt}\n\nНАПИШИ ПОСТ СТРОГО ПО ЭТОМУ ШАБЛОНУ:\n{selected_template}\n\nДАННЫЕ:\n{user_input}\n{site_content}"
     
     try:
-        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
+        response = client.models.generate_content(model=MODEL_ID, contents=full_prompt)
         final_text = response.text.strip()
         final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
         return final_text
     except Exception as e:
-        print(f"❌ Ошибка рерайта: {e}")
-        return text
+        print(f"Error: {e}")
+        return "Ошибка генерации. Попробуйте другой запрос."
 
-def chat_with_ai(user_message, history=None):
-    """Прямой чат с Gemini"""
+def rewrite_post(text, style="short"):
+    styles = {
+        "short": "Сделай текст коротким и лаконичным.",
+        "fun": "Сделай текст веселым и драйвовым.",
+        "pro": "Сделай текст профессиональным и детальным.",
+        "scientist": "Перепиши как безумный ученый.",
+        "boring": "Сделай текст максимально скучным."
+    }
+    instruction = styles.get(style, "Улучши этот текст.")
+    prompt = f"{instruction}\n\nВАЖНО: Сохрани HTML-теги.\n\nТекст:\n{text}"
     try:
-        # Формируем промпт для обычного общения
-        full_prompt = f"Ты помощник администратора Telegram-канала по Minecraft. Общайся вежливо и помогай по любым вопросам.\n\nПользователь: {user_message}"
-        response = client.models.generate_content(model=MODEL_ID, contents=full_prompt)
+        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
+        return re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', response.text.strip())
+    except: return text
+
+def chat_with_ai(user_message):
+    try:
+        response = client.models.generate_content(model=MODEL_ID, contents=f"Ты помощник администратора канала Minecraft. Отвечай кратко.\nПользователь: {user_message}")
         return response.text.strip()
-    except Exception as e:
-        print(f"❌ Ошибка чата: {e}")
-        return "Извини, я не могу сейчас ответить. Попробуй позже."
+    except: return "Ошибка чата."

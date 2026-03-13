@@ -3,12 +3,30 @@ import config
 
 def get_main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(KeyboardButton("📝 Создать пост"), KeyboardButton("🤖 Чат с ИИ"))
-    markup.add(KeyboardButton("🌍 Выбор языка"), KeyboardButton("📢 Выбор канала"))
-    markup.add(KeyboardButton("➕ Добавить канал"), KeyboardButton("📋 Очередь постов"))
-    markup.add(KeyboardButton("📊 Статистика"), KeyboardButton("📥 Экспорт (CSV)"))
-    markup.add(KeyboardButton("📢 Реклама"), KeyboardButton("💾 Бекап базы"))    
-    markup.add(KeyboardButton("🧐 Анализ комментариев"))
+    markup.add(KeyboardButton("➕ Создать пост"), KeyboardButton("🤖 Чат с ИИ"))
+    markup.add(KeyboardButton("📋 Очередь"), KeyboardButton("🌍 Язык"))
+    markup.add(KeyboardButton("📢 Каналы"), KeyboardButton("📊 Статистика"))
+    markup.add(KeyboardButton("⚙️ Настройки"), KeyboardButton("🧐 Анализ"))
+    return markup
+
+def get_settings_menu():
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("📢 Рекламный текст", callback_data="set_ad_text"),
+        InlineKeyboardButton("➕ Добавить канал", callback_data="add_new_channel")
+    )
+    markup.add(InlineKeyboardButton("💾 Бекап базы", callback_data="db_backup"))
+    markup.add(InlineKeyboardButton("📥 Экспорт CSV", callback_data="csv_export"))
+    return markup
+
+def get_template_menu():
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        InlineKeyboardButton("📦 Стандартный (Описание + фишки)", callback_data="tmpl_standard"),
+        InlineKeyboardButton("🔥 Список (ТОП-4 фишки)", callback_data="tmpl_list"),
+        InlineKeyboardButton("🧐 Обзор (Плюсы и Минусы)", callback_data="tmpl_review")
+    )
+    markup.add(InlineKeyboardButton("❌ Отмена", callback_data="cancel_action"))
     return markup
 
 def get_language_menu():
@@ -27,13 +45,10 @@ def get_cancel_markup():
 
 def get_draft_markup(draft_id):
     markup = InlineKeyboardMarkup(row_width=2)
-    interval = getattr(config, 'SMART_QUEUE_INTERVAL_HOURS', 2)
+    markup.add(InlineKeyboardButton("⏳ Умная очередь", callback_data="add_to_smart_q"))
     markup.add(
-        InlineKeyboardButton(f"⏳ Умная очередь (+{interval} ч)", callback_data="add_to_smart_q")
-    )
-    markup.add(
-        InlineKeyboardButton("🚀 Опубликовать", callback_data="pub_now"),
-        InlineKeyboardButton("📅 В очередь", callback_data="pub_queue_menu")
+        InlineKeyboardButton("🚀 Сейчас", callback_data="pub_now"),
+        InlineKeyboardButton("📅 Время", callback_data="pub_queue_menu")
     )
     markup.add(
         InlineKeyboardButton("📝 Текст", callback_data="edit_text"),
@@ -55,23 +70,23 @@ def get_rewrite_menu():
         InlineKeyboardButton("👨‍🔬 Учёный", callback_data="rw_scientist"),
         InlineKeyboardButton("😴 Нудный", callback_data="rw_boring")
     )
-    markup.add(
-        InlineKeyboardButton("👔 Профи", callback_data="rw_pro"),
-        InlineKeyboardButton("⬅️ Назад", callback_data="back_to_draft")
-    )
+    markup.add(InlineKeyboardButton("👔 Профи", callback_data="rw_pro"))
+    markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="back_to_draft"))
     return markup
 
 def get_publish_queue_menu(target_id, prefix="sched_"):
-    markup = InlineKeyboardMarkup(row_width=2)
+    markup = InlineKeyboardMarkup(row_width=3)
     markup.add(
-        InlineKeyboardButton("2 часа", callback_data=f"{prefix}interval_2_{target_id}"),       
-        InlineKeyboardButton("4 часа", callback_data=f"{prefix}interval_4_{target_id}"),       
-        InlineKeyboardButton("6 часов", callback_data=f"{prefix}interval_6_{target_id}"),     
-        InlineKeyboardButton("12 часов", callback_data=f"{prefix}interval_12_{target_id}"),   
-        InlineKeyboardButton("24 часа", callback_data=f"{prefix}interval_24_{target_id}")      
+        InlineKeyboardButton("+2ч", callback_data=f"{prefix}interval_2_{target_id}"),       
+        InlineKeyboardButton("+4ч", callback_data=f"{prefix}interval_4_{target_id}"),       
+        InlineKeyboardButton("+6ч", callback_data=f"{prefix}interval_6_{target_id}")
     )
-    markup.add(InlineKeyboardButton("📅 Точное время", callback_data=f"{prefix}exact_{target_id}"))
-    markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="back_to_draft" if prefix == "sched_" else f"q_page_0"))
+    markup.add(
+        InlineKeyboardButton("+12ч", callback_data=f"{prefix}interval_12_{target_id}"),   
+        InlineKeyboardButton("+24ч", callback_data=f"{prefix}interval_24_{target_id}"),
+        InlineKeyboardButton("🕒 Своё", callback_data=f"{prefix}exact_{target_id}")
+    )
+    markup.add(InlineKeyboardButton("⬅️ Назад", callback_data="back_to_draft" if prefix == "sched_" else "q_page_0"))
     return markup
 
 def get_queue_manage_markup(post_id, page):
@@ -80,13 +95,12 @@ def get_queue_manage_markup(post_id, page):
     if page > 0: nav_row.append(InlineKeyboardButton("⬅️", callback_data=f"q_page_{page-1}"))
     nav_row.append(InlineKeyboardButton("➡️", callback_data=f"q_page_{page+1}"))
     markup.add(*nav_row)
-    
     markup.add(
         InlineKeyboardButton("📝 Текст", callback_data=f"q_edit_{post_id}"),
-        InlineKeyboardButton("📅 Время", callback_data=f"q_time_{post_id}")
+        InlineKeyboardButton("🕒 Время", callback_data=f"q_time_{post_id}")
     )
     markup.add(
-        InlineKeyboardButton("🚀 Сейчас", callback_data=f"q_pub_{post_id}"),
+        InlineKeyboardButton("🚀 Опубликовать", callback_data=f"q_pub_{post_id}"),
         InlineKeyboardButton("🗑 Удалить", callback_data=f"q_del_{post_id}")
     )
     return markup

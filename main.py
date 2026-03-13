@@ -97,8 +97,14 @@ def handle_text_photo_file(message):
             user_states[chat_id] = None
             bot.send_message(chat_id, MESSAGES[lang]['ai_chat_off'], reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
             return
+        
         bot.send_chat_action(chat_id, 'typing')
-        response = ai_generator.chat_with_ai(message.text, lang)
+        # Контекст для ИИ: что за бот, сколько постов в очереди и т.д.
+        stats = database.get_stats()
+        channel = utils.get_active_channel(user_id)
+        context_msg = f"[Context: Bot for @lazikosmods. Queue: {stats['queue']} posts. Current Channel: {channel}] {message.text}"
+        
+        response = ai_generator.chat_with_ai(context_msg, lang)
         bot.send_message(chat_id, f"🤖 <b>AI:</b>\n\n{response}", parse_mode='HTML', reply_markup=markups.get_cancel_markup(lang))
         return
 
@@ -262,6 +268,12 @@ def callback_handler(call):
             finalize_draft_update(chat_id, call.message.message_id, draft)
 
     elif call.data == "edit_text":
+        draft = database.get_draft(user_id)
+        if draft:
+            # Сначала отправляем текущий текст для удобного копирования
+            bot.send_message(chat_id, "📌 <b>Current text (copy to edit):</b>", parse_mode='HTML')
+            bot.send_message(chat_id, draft['text'])
+        
         msg = bot.send_message(chat_id, MESSAGES[lang]['enter_new_text'], reply_markup=markups.get_cancel_markup(lang))
         bot.register_next_step_handler(msg, save_edited_text, call.message.message_id, chat_id)
 
@@ -276,6 +288,8 @@ def callback_handler(call):
             database.clear_draft(user_id)
             bot.answer_callback_query(call.id, MESSAGES[lang]['smart_queue_done'] + datetime.fromtimestamp(new_time).strftime('%d.%m %H:%M'))
             bot.delete_message(chat_id, call.message.message_id)
+            # Возвращаем в главное меню после умной очереди
+            bot.send_message(chat_id, "🏠", reply_markup=markups.get_main_menu(lang))
 
     elif call.data == "add_ad":
         ad_text = utils.get_ad_text()
@@ -328,15 +342,18 @@ def save_edited_text(message, target_id, chat_id, is_queue=False, post_id=None):
     lang = get_user_lang(user_id)
     if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]: return
     
+    # Получаем текст с сохранением HTML форматирования пользователя
+    formatted_text = utils.get_html_text(message)
+    
     if is_queue:
-        database.update_post_text(post_id, message.text)
+        database.update_post_text(post_id, formatted_text)
         show_queue_page(chat_id, 0)
     else:
         draft = database.get_draft(user_id)
         if draft:
-            # Отправляем новый текст на рерайт "красивое оформление", но с сохранением смысла пользователя
             bot.send_chat_action(chat_id, 'typing')
-            draft['text'] = ai_generator.rewrite_post(message.text, "pro", lang)
+            # Используем ИИ для "причесывания", но передаем уже форматированный текст
+            draft['text'] = ai_generator.rewrite_post(formatted_text, "pro", lang)
             database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1 if draft.get('ad_added') else 0)
             send_draft_preview(chat_id, draft)
 

@@ -41,6 +41,29 @@ def format_queue_post(post, index, total):
 <i>{preview}{'...' if len(text) > 100 else ''}</i>
 ━━━━━━━━━━━━━"""
 
+def get_html_text(message):
+    """Конвертирует текст сообщения Telegram с сущностями (bold, italic и т.д.) в HTML."""
+    if not message.entities:
+        return message.text
+
+    text = message.text
+    entities = sorted(message.entities, key=lambda e: e.offset, reverse=True)
+    for e in entities:
+        start = e.offset
+        end = e.offset + e.length
+        tag = None
+        if e.type == 'bold': tag = 'b'
+        elif e.type == 'italic': tag = 'i'
+        elif e.type == 'code': tag = 'code'
+        elif e.type == 'pre': tag = 'pre'
+        elif e.type == 'text_link': 
+            text = text[:start] + f'<a href="{e.url}">' + text[start:end] + '</a>' + text[end:]
+            continue
+        
+        if tag:
+            text = text[:start] + f'<{tag}>' + text[start:end] + f'</{tag}>' + text[end:]
+    return text
+
 def get_channels():
     channels = config.AVAILABLE_CHANNELS.copy()
     if os.path.exists("channels.txt"):

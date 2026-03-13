@@ -108,7 +108,49 @@ def fetch_page_content(url):
         print(f"⚠️ Не смог прочитать сайт {url}: {e}")
         return ""
 
-def generate_post(user_input, persona="uz"):
+TEMPLATES = {
+    "standard": """
+📦 <b>[Название]</b>
+
+<blockquote expandable><b>Bu nima?</b>
+[Описание]
+
+<b>Asosiy xususiyatlar:</b>
+• [Фишка 1]
+• [Фишка 2]
+
+🎮 Versiya: [Версия]</blockquote>
+
+<blockquote>💖 - zo`r
+💔 - Unchamas</blockquote>
+""",
+    "list": """
+🔥 <b>[Название]: ТОП ФИШЕК</b>
+
+<blockquote expandable>
+1️⃣ [Фишка 1]
+2️⃣ [Фишка 2]
+3️⃣ [Фишка 3]
+4️⃣ [Фишка 4]
+
+🎮 Поддерживает: [Версия]
+</blockquote>
+""",
+    "review": """
+🧐 <b>ОБЗОР: [Название]</b>
+
+<blockquote expandable>
+[Текст подробного обзора мода или карты, выделяющий атмосферу и геймплейные изменения.]
+
+✅ Плюсы: [Плюс]
+❌ Минусы: [Минус]
+
+🎮 Версия: [Версия]
+</blockquote>
+"""
+}
+
+def generate_post(user_input, persona="uz", template="standard"):
     url = extract_url(user_input)
     site_context = ""
     
@@ -116,21 +158,23 @@ def generate_post(user_input, persona="uz"):
         page_text = fetch_page_content(url)
 
     selected_prompt = PROMPTS.get(persona, PROMPTS["uz"])
+    selected_template = TEMPLATES.get(template, TEMPLATES["standard"])
     
-    prompt = f"{selected_prompt}\n\nСырая информация от пользователя:\n{user_input}{site_context}"
+    prompt = f"{selected_prompt}\n\nИСПОЛЬЗУЙ ЭТОТ ШАБЛОН:\n{selected_template}\n\nСырая информация от пользователя:\n{user_input}{site_context}"
     response = client.models.generate_content(model=MODEL_ID, contents=prompt)
     
     final_text = response.text.strip()
-    # Конвертируем Markdown-звездочки в HTML-теги для жирного текста
     final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
     
     return final_text
 
 def rewrite_post(text, style="short"):
     styles = {
-        "short": "Сделай текст короче и лаконичнее. Оставь только самую суть, убери лишнюю воду.",
+        "short": "Сделай текст максимально коротким и лаконичнее. Оставь только самую суть, убери лишнюю воду.",
         "fun": "Перепиши текст в более веселом, драйвовом и геймерском стиле. Добавь чуть больше эмодзи.",
-        "pro": "Сделай текст более профессиональным, строгим и информативным."
+        "pro": "Сделай текст более профессиональным, строгим и информативным.",
+        "scientist": "Перепиши текст как сумасшедший ученый. Используй сложные термины, аналитический тон и псевдонаучные выводы.",
+        "boring": "Сделай текст максимально нудным, затянутым и бесполезно подробным. Минимум эмоций."
     }
     prompt_instruction = styles.get(style, "Улучши этот текст.")
     prompt = f"{prompt_instruction}\n\nВАЖНО: Сохрани HTML-теги форматирования (<b>, <blockquote>) и все хэштеги в конце.\n\nОригинальный текст:\n{text}"
@@ -143,3 +187,14 @@ def rewrite_post(text, style="short"):
     except Exception as e:
         print(f"❌ Ошибка рерайта: {e}")
         return text
+
+def chat_with_ai(user_message, history=None):
+    """Прямой чат с Gemini"""
+    try:
+        # Формируем промпт для обычного общения
+        full_prompt = f"Ты помощник администратора Telegram-канала по Minecraft. Общайся вежливо и помогай по любым вопросам.\n\nПользователь: {user_message}"
+        response = client.models.generate_content(model=MODEL_ID, contents=full_prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"❌ Ошибка чата: {e}")
+        return "Извини, я не могу сейчас ответить. Попробуй позже."

@@ -4,41 +4,55 @@ import time
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
+    # Основная таблица очереди и постов
     c.execute('''CREATE TABLE IF NOT EXISTS queue
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   photo_id TEXT,
                   text TEXT,
                   document_id TEXT,
+                  channel_id TEXT,
+                  scheduled_time INTEGER,
                   status TEXT DEFAULT 'pending')''')
     
-    # Безопасно добавляем новые колонки, если их нет
-    try:
-        c.execute("ALTER TABLE queue ADD COLUMN channel_id TEXT")
-    except sqlite3.OperationalError:
-        pass # Колонка уже существует
-    
-    try:
-        c.execute("ALTER TABLE queue ADD COLUMN scheduled_time INTEGER")
-    except sqlite3.OperationalError:
-        pass # Колонка уже существует
-        
+    # Таблица комментариев для анализа
+    c.execute('''CREATE TABLE IF NOT EXISTS comments
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_name TEXT,
+                  text TEXT,
+                  timestamp INTEGER)''')
+                  
+    # ТАБЛИЦА НАСТРОЕК (ДЛЯ ДОЛГОЙ ПАМЯТИ)
+    c.execute('''CREATE TABLE IF NOT EXISTS user_settings
+                 (user_id INTEGER PRIMARY KEY,
+                  lang TEXT DEFAULT 'uz',
+                  active_channel TEXT)''')
+                  
+    # ТАБЛИЦА ЧЕРНОВИКОВ (ЧТОБЫ НЕ ПРОПАДАЛИ ПРИ RESTART)
+    c.execute('''CREATE TABLE IF NOT EXISTS drafts
+                 (user_id INTEGER PRIMARY KEY,
+                  photo_id TEXT,
+                  text TEXT,
+                  document_id TEXT,
+                  channel_id TEXT,
+                  ad_added INTEGER DEFAULT 0)''')
+                  
     conn.commit()
     conn.close()
+
+# --- ФУНКЦИИ ОЧЕРЕДИ ---
 
 def add_to_queue(photo_id, text, document_id=None, channel_id=None, scheduled_time=None):
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
-    c.execute("INSERT INTO queue (photo_id, text, document_id, channel_id, scheduled_time) VALUES (?, ?, ?, ?, ?)", 
+    c.execute("INSERT INTO queue (photo_id, text, document_id, channel_id, scheduled_time, status) VALUES (?, ?, ?, ?, ?, 'pending')", 
               (photo_id, text, document_id, channel_id, scheduled_time))
     conn.commit()
     conn.close()
 
 def get_ready_posts():
-    """Получает посты, время публикации которых уже наступило"""
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
     current_time = int(time.time())
-    # Выбираем посты, где время <= текущему, или время не задано (сразу в очередь)
     c.execute('''SELECT id, photo_id, text, document_id, channel_id 
                  FROM queue 
                  WHERE status='pending' AND (scheduled_time IS NULL OR scheduled_time <= ?) 
@@ -50,17 +64,23 @@ def get_ready_posts():
 def mark_as_posted(post_id):
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
-    c.execute("UPDATE queue SET status='posted' WHERE id=?", (post_id,))
+    c.execute("UPDATE queue SET status = 'posted' WHERE id = ?", (post_id,))
     conn.commit()
     conn.close()
 
-def get_queue_count():
+def update_post_text(post_id, new_text):
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM queue WHERE status='pending'")
-    count = c.fetchone()[0]
+    c.execute("UPDATE queue SET text = ? WHERE id = ?", (new_text, post_id))
+    conn.commit()
     conn.close()
-    return count
+
+def update_post_time(post_id, new_time):
+    conn = sqlite3.connect('bot_data.db')
+    c = conn.cursor()
+    c.execute("UPDATE queue SET scheduled_time = ? WHERE id = ?", (new_time, post_id))
+    conn.commit()
+    conn.close()
 
 def get_all_pending():
     conn = sqlite3.connect('bot_data.db')
@@ -78,7 +98,6 @@ def delete_from_queue(post_id):
     conn.close()
 
 def get_last_scheduled_time():
-    """Находит время самого последнего запланированного поста в очереди."""
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
     c.execute("SELECT scheduled_time FROM queue WHERE status='pending' AND scheduled_time IS NOT NULL ORDER BY scheduled_time DESC LIMIT 1")
@@ -86,51 +105,77 @@ def get_last_scheduled_time():
     conn.close()
     return result[0] if result else None
 
-# 🧠 НОВАЯ ФУНКЦИЯ ДЛЯ УМНОЙ ОЧЕРЕДИ
-def get_last_scheduled_time():
+# --- ФУНКЦИИ НАСТРОЕК И ЧЕРНОВИКОВ (ДОЛГАЯ ПАМЯТЬ) ---
+
+def set_user_setting(user_id, lang=None, channel=None):
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
-    c.execute("SELECT scheduled_time FROM queue WHERE status='pending' AND scheduled_time IS NOT NULL ORDER BY scheduled_time DESC LIMIT 1")
-    result = c.fetchone()
+    if lang:
+        c.execute("INSERT INTO user_settings (user_id, lang) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET lang=?", (user_id, lang, lang))
+    if channel:
+        c.execute("INSERT INTO user_settings (user_id, active_channel) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET active_channel=?", (user_id, channel, channel))
+    conn.commit()
     conn.close()
-    return result[0] if result else None
+
+def get_user_settings(user_id):
+    conn = sqlite3.connect('bot_data.db')
+    c = conn.cursor()
+    c.execute("SELECT lang, active_channel FROM user_settings WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row if row else ('uz', None)
+
+def save_draft(user_id, photo_id, text, document_id, channel_id, ad_added=0):
+    conn = sqlite3.connect('bot_data.db')
+    c = conn.cursor()
+    c.execute('''INSERT INTO drafts (user_id, photo_id, text, document_id, channel_id, ad_added) 
+                 VALUES (?, ?, ?, ?, ?, ?) 
+                 ON CONFLICT(user_id) DO UPDATE SET 
+                 photo_id=excluded.photo_id, text=excluded.text, 
+                 document_id=excluded.document_id, channel_id=excluded.channel_id, 
+                 ad_added=excluded.ad_added''', 
+              (user_id, photo_id, text, document_id, channel_id, ad_added))
+    conn.commit()
+    conn.close()
+
+def get_draft(user_id):
+    conn = sqlite3.connect('bot_data.db')
+    c = conn.cursor()
+    c.execute("SELECT photo_id, text, document_id, channel_id, ad_added FROM drafts WHERE user_id = ?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'photo': row[0], 'text': row[1], 'document': row[2], 'channel': row[3], 'ad_added': bool(row[4])}
+    return None
+
+def clear_draft(user_id):
+    conn = sqlite3.connect('bot_data.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM drafts WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+# --- СТАТИСТИКА И КОММЕНТАРИИ ---
 
 def get_stats():
-    """Собирает статистику для панели управления"""
     import pytz
     from datetime import datetime
-    
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
-    
-    # Всего постов
     c.execute("SELECT COUNT(*) FROM queue")
     total = c.fetchone()[0]
-    
-    # Опубликовано
     c.execute("SELECT COUNT(*) FROM queue WHERE status='posted'")
     published = c.fetchone()[0]
-    
-    # В очереди
     c.execute("SELECT COUNT(*) FROM queue WHERE status='pending'")
     queue_count = c.fetchone()[0]
-    
-    # Активность за сегодня
     tashkent_tz = pytz.timezone('Asia/Tashkent')
     today_start = int(datetime.now(tashkent_tz).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-    c.execute("SELECT COUNT(*) FROM queue WHERE scheduled_time >= ?", (today_start,))
+    c.execute("SELECT COUNT(*) FROM queue WHERE status='posted' AND scheduled_time >= ?", (today_start,))
     today = c.fetchone()[0]
-    
     conn.close()
-    return {
-        'total': total,
-        'published': published,
-        'queue': queue_count,
-        'today': today
-    }
+    return {'total': total, 'published': published, 'queue': queue_count, 'today': today}
 
 def get_all_posts():
-    """Выгружает все посты для бэкапа"""
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
     c.execute("SELECT * FROM queue")
@@ -139,27 +184,11 @@ def get_all_posts():
     return rows
 
 def record_published_post(photo_id, text, document_id, channel_id):
-    """Записывает пост сразу как 'posted', чтобы он учитывался в статистике"""
-    import sqlite3
-    import time
     conn = sqlite3.connect('bot_data.db')
     c = conn.cursor()
     current_time = int(time.time())
     c.execute("INSERT INTO queue (photo_id, text, document_id, channel_id, scheduled_time, status) VALUES (?, ?, ?, ?, ?, 'posted')", 
               (photo_id, text, document_id, channel_id, current_time))
-    conn.commit()
-    conn.close()
-
-# --- ФУНКЦИИ ДЛЯ АНАЛИЗА КОММЕНТАРИЕВ ---
-
-def init_comments_table():
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS comments
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_name TEXT,
-                  text TEXT,
-                  timestamp INTEGER)''')
     conn.commit()
     conn.close()
 
@@ -186,5 +215,4 @@ def clear_comments():
     conn.commit()
     conn.close()
 
-# Вызываем создание таблицы комментариев при импорте
-init_comments_table()
+init_db()

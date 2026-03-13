@@ -15,17 +15,18 @@ import markups
 import core
 import pytz
 from datetime import datetime, timedelta
+from bot_instance import bot
 
 database.init_db()
-bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
 album_cache = {}
 user_states = {}
 
-# --- ПЕРМАНЕНТНЫЙ SCHEDULER (ДЛЯ ДОЛГОЙ ПАМЯТИ ОЧЕРЕДИ) ---
+# --- ПЕРМАНЕНТНЫЙ SCHEDULER (БЕЗ ПЕРЕДАЧИ ОБЪЕКТА BOT) ---
 jobstores = {'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')}
 scheduler = BackgroundScheduler(jobstores=jobstores)
+# Мы передаем только ссылку на функцию core.process_queue без аргументов
 if not scheduler.get_job('queue_process'):
-    scheduler.add_job(core.process_queue, 'interval', minutes=1, args=[bot], id='queue_process')
+    scheduler.add_job(core.process_queue, 'interval', minutes=1, id='queue_process', replace_existing=True)
 scheduler.start()
 
 # --- Вспомогательные функции ---
@@ -65,7 +66,7 @@ def show_queue_page(chat_id, page, message_id=None):
 # --- Обработчики ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    if message.chat.type != 'private': return # Бот не отвечает в группах
+    if message.chat.type != 'private': return
     user_states[message.chat.id] = None
     greeting = utils.get_time_greeting()
     bot.send_message(message.chat.id, f"{greeting}! Я бот-администратор.", reply_markup=markups.get_main_menu())
@@ -75,7 +76,6 @@ def handle_text_photo(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # 🛑 ЗАПРЕТ НА ОТВЕТЫ В ГРУППАХ (ТОЛЬКО АНАЛИЗ)
     if message.chat.type in ['group', 'supergroup']:
         if not message.text or not message.text.startswith('/'):
             database.save_comment(message.from_user.first_name, message.text, int(time.time()))
@@ -94,7 +94,7 @@ def handle_text_photo(message):
     if message.content_type == 'text':
         text = message.text
         if text == "📝 Создать пост":
-            bot.send_message(chat_id, "Пришли ссылку или текст. Также можешь выбрать шаблон в настройках.")
+            bot.send_message(chat_id, "Пришли ссылку или текст.")
         elif text == "🤖 Чат с ИИ":
             user_states[chat_id] = 'ai_chat'
             bot.send_message(chat_id, "Задавай вопросы по Minecraft!", reply_markup=markups.get_cancel_markup())
@@ -103,7 +103,7 @@ def handle_text_photo(message):
         elif text == "📋 Очередь постов":
             show_queue_page(chat_id, 0)
         elif text == "📊 Статистика":
-            core.show_stats(bot, chat_id, len(utils.get_channels()))
+            core.show_stats(chat_id, len(utils.get_channels()))
         elif text == "🧐 Анализ комментариев":
             msg = bot.send_message(chat_id, "⏳ Анализ...")
             report = comments_analyzer.analyze_comments()
@@ -112,7 +112,7 @@ def handle_text_photo(message):
             markup.add(telebot.types.InlineKeyboardButton("🗑 Очистить", callback_data="clear_comments_db"))
             bot.send_message(chat_id, report, parse_mode="HTML", reply_markup=markup)
         elif text == "📢 Реклама":
-            msg = bot.send_message(chat_id, "Пришли новый текст рекламы:", reply_markup=markups.get_cancel_markup())
+            msg = bot.send_message(chat_id, "Пришли текст рекламы:", reply_markup=markups.get_cancel_markup())
             bot.register_next_step_handler(msg, process_ad_step)
         elif text == "➕ Добавить канал":
             msg = bot.send_message(chat_id, "Введи @username:", reply_markup=markups.get_cancel_markup())
@@ -209,7 +209,7 @@ def send_draft_preview(chat_id, draft):
     else: sent = bot.send_message(chat_id, draft['text'], parse_mode='HTML')
     bot.edit_message_reply_markup(chat_id, sent.message_id, reply_markup=markups.get_draft_markup(sent.message_id))
 
-# --- Next Step ---
+# --- Next Step Handlers ---
 def process_ad_step(message):
     if message.text == "❌ Отмена": return
     utils.save_ad_text(message.text)
@@ -267,7 +267,38 @@ def callback_handler(call):
         elif action == 'edit':
             msg = bot.send_message(chat_id, "Новый текст:", reply_markup=markups.get_cancel_markup())
             bot.register_next_step_handler(msg, save_edited_text, None, chat_id, True, val)
-    # ... Остальные колбэки используют database.get_draft(user_id) ...
-    # (Добавлена логика работы с базой данных вместо словарей)
+        elif action == 'pub':
+            post = next((p for p in database.get_all_pending() if p[0] == val), None)
+            if post and core.publish_post_data(post[0], post[1], post[2], post[3], post[4] or config.DEFAULT_CHANNEL):
+                show_queue_page(chat_id, 0, call.message.message_id)
+        elif action == 'time':
+            bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(val, "qtime_"))
+    
+    elif call.data.startswith('qtime_'):
+        parts = call.data.split('_')
+        action, val, post_id = parts[1], int(parts[2]), int(parts[3])
+        if action == 'interval':
+            database.update_post_time(post_id, int(time.time()) + val * 3600)
+            show_queue_page(chat_id, 0, call.message.message_id)
+        elif action == 'exact':
+            msg = bot.send_message(chat_id, "Введи время (ДД.ММ.ГГГГ ЧЧ:ММ):", reply_markup=markups.get_cancel_markup())
+            bot.register_next_step_handler(msg, process_exact_time, None, chat_id, True, post_id)
+
+    elif call.data == "rewrite_menu": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_rewrite_menu())
+    elif call.data.startswith("rw_"):
+        draft = database.get_draft(user_id)
+        if draft:
+            draft['text'] = ai_generator.rewrite_post(draft['text'], call.data.split("_")[1])
+            database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'])
+            update_draft_inline(chat_id, call.message.message_id, draft)
+    elif call.data == "pub_now":
+        draft = database.get_draft(user_id)
+        if draft and core.publish_post_data(-1, draft['photo'], draft['text'], draft['document'], draft['channel']):
+            database.record_published_post(draft['photo'], draft['text'], draft['document'], draft['channel'])
+            database.clear_draft(user_id)
+            bot.delete_message(chat_id, call.message.message_id)
+    elif call.data == "pub_queue_menu": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(call.message.message_id))
+    elif call.data == "back_to_draft": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_draft_markup(call.message.message_id))
+    elif call.data == "clear_comments_db": database.clear_comments(); bot.answer_callback_query(call.id, "Очищено!")
 
 bot.polling(none_stop=True)

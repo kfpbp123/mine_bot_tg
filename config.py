@@ -6,6 +6,10 @@ load_dotenv()
 ADMIN_IDS = [5703605946] # Твой ID администратора
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# Провайдер ИИ: "gemini" или "groq"
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
 
 CHANNELS_STR = os.getenv("CHANNELS", "@lazikosmods")
 AVAILABLE_CHANNELS = [ch.strip() for ch in CHANNELS_STR.split(',')]

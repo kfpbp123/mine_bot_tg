@@ -21,29 +21,12 @@ database.init_db()
 album_cache = {}
 user_states = {}
 
-# --- ПЕРМАНЕНТНЫЙ SCHEDULER (БЕЗ ПЕРЕДАЧИ ОБЪЕКТА BOT) ---
+# --- SCHEDULER ---
 jobstores = {'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')}
 scheduler = BackgroundScheduler(jobstores=jobstores)
-# Мы передаем только ссылку на функцию core.process_queue без аргументов
 if not scheduler.get_job('queue_process'):
     scheduler.add_job(core.process_queue, 'interval', minutes=1, id='queue_process', replace_existing=True)
 scheduler.start()
-
-# --- Вспомогательные функции ---
-def get_user_persona(user_id):
-    lang, _ = database.get_user_settings(user_id)
-    return lang
-
-def get_user_channel(user_id):
-    _, channel = database.get_user_settings(user_id)
-    return channel or config.DEFAULT_CHANNEL
-
-def update_draft_inline(chat_id, target_id, draft):
-    markup = markups.get_draft_markup(target_id)
-    try: bot.edit_message_text(text=draft['text'], chat_id=chat_id, message_id=target_id, parse_mode='HTML', reply_markup=markup)
-    except:
-        try: bot.edit_message_caption(caption=draft['text'], chat_id=chat_id, message_id=target_id, parse_mode='HTML', reply_markup=markup)
-        except Exception: pass
 
 def show_queue_page(chat_id, page, message_id=None):
     posts = database.get_all_pending()
@@ -60,10 +43,9 @@ def show_queue_page(chat_id, page, message_id=None):
     markup = markups.get_queue_manage_markup(post[0], page)
     if message_id:
         try: bot.edit_message_text(msg_text, chat_id, message_id, parse_mode='HTML', reply_markup=markup)
-        except Exception: pass
+        except: pass
     else: bot.send_message(chat_id, msg_text, parse_mode='HTML', reply_markup=markup)
 
-# --- Обработчики ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     if message.chat.type != 'private': return
@@ -77,7 +59,7 @@ def handle_text_photo(message):
     user_id = message.from_user.id
 
     if message.chat.type in ['group', 'supergroup']:
-        if not message.text or not message.text.startswith('/'):
+        if message.text and not message.text.startswith('/'):
             database.save_comment(message.from_user.first_name, message.text, int(time.time()))
         return
 
@@ -111,15 +93,25 @@ def handle_text_photo(message):
             markup = telebot.types.InlineKeyboardMarkup()
             markup.add(telebot.types.InlineKeyboardButton("🗑 Очистить", callback_data="clear_comments_db"))
             bot.send_message(chat_id, report, parse_mode="HTML", reply_markup=markup)
+        elif text == "📥 Экспорт (CSV)":
+            filename, _ = utils.generate_csv_export()
+            if filename:
+                with open(filename, 'rb') as f: bot.send_document(chat_id, f)
+                os.remove(filename)
+            else: bot.send_message(chat_id, "Данных для экспорта пока нет.")
+        elif text == "💾 Бекап базы":
+            if os.path.exists('bot_data.db'):
+                with open('bot_data.db', 'rb') as f: bot.send_document(chat_id, f)
+            else: bot.send_message(chat_id, "Файл базы данных не найден.")
         elif text == "📢 Реклама":
-            msg = bot.send_message(chat_id, "Пришли текст рекламы:", reply_markup=markups.get_cancel_markup())
+            msg = bot.send_message(chat_id, "Пришли новый текст рекламы:", reply_markup=markups.get_cancel_markup())
             bot.register_next_step_handler(msg, process_ad_step)
         elif text == "➕ Добавить канал":
             msg = bot.send_message(chat_id, "Введи @username:", reply_markup=markups.get_cancel_markup())
             bot.register_next_step_handler(msg, process_add_channel_step)
         elif text == "📢 Выбор канала":
             markup = telebot.types.InlineKeyboardMarkup(row_width=1)
-            active_ch = get_user_channel(user_id)
+            active_ch = utils.get_active_channel(user_id)
             for ch in utils.get_channels():
                 status = "✅ " if active_ch == ch else ""
                 markup.add(telebot.types.InlineKeyboardButton(f"{status}{ch}", callback_data=f"set_channel_{ch}")) 
@@ -145,22 +137,20 @@ def process_single_message(message):
     try:
         user_input = message.caption if message.photo else message.text
         if not user_input: return
-        persona = get_user_persona(message.from_user.id)
+        persona = utils.get_active_persona(message.from_user.id)
         generated_text = ai_generator.generate_post(user_input, persona)
         photo_id = None
         if message.photo:
             file_info = bot.get_file(message.photo[-1].file_id)
-            downloaded_file = bot.download_file(file_info.file_path)
-            with open(temp_in, 'wb') as f: f.write(downloaded_file)
+            with open(temp_in, 'wb') as f: f.write(bot.download_file(file_info.file_path))
             watermarker.add_watermark(temp_in, temp_out)
             with open(temp_out if os.path.exists(temp_out) else temp_in, 'rb') as f:
                 sent = bot.send_photo(message.chat.id, f)
                 photo_id = sent.photo[-1].file_id
                 bot.delete_message(message.chat.id, sent.message_id)
-        draft = {'photo': photo_id, 'text': generated_text, 'document': None, 'ad_added': False, 'channel': get_user_channel(message.from_user.id)}
+        draft = {'photo': photo_id, 'text': generated_text, 'document': None, 'ad_added': False, 'channel': utils.get_active_channel(message.from_user.id)}
         database.save_draft(message.from_user.id, photo_id, generated_text, None, draft['channel'])
         send_draft_preview(message.chat.id, draft)
-    except Exception as e: bot.send_message(message.chat.id, f"❌ Ошибка: {e}")
     finally:
         for f in [temp_in, temp_out]: 
             if os.path.exists(f): os.remove(f)
@@ -170,7 +160,7 @@ def process_album(media_group_id, chat_id, user_id):
     if not messages: return
     messages.sort(key=lambda x: x.message_id)
     caption = next((m.caption for m in messages if m.caption), "Скриншоты")
-    persona = get_user_persona(user_id)
+    persona = utils.get_active_persona(user_id)
     generated_text = ai_generator.generate_post(caption, persona)
     temp_files, opened_files = [], []
     try:
@@ -188,7 +178,7 @@ def process_album(media_group_id, chat_id, user_id):
         sent_msgs = bot.send_media_group(chat_id, media)
         photo_id_str = ",".join([m.photo[-1].file_id for m in sent_msgs])
         for m in sent_msgs: bot.delete_message(chat_id, m.message_id)
-        draft = {'photo': photo_id_str, 'text': generated_text, 'document': None, 'ad_added': False, 'channel': get_user_channel(user_id)}
+        draft = {'photo': photo_id_str, 'text': generated_text, 'document': None, 'ad_added': False, 'channel': utils.get_active_channel(user_id)}
         database.save_draft(user_id, photo_id_str, generated_text, None, draft['channel'])
         send_draft_preview(chat_id, draft)
     finally:
@@ -209,21 +199,26 @@ def send_draft_preview(chat_id, draft):
     else: sent = bot.send_message(chat_id, draft['text'], parse_mode='HTML')
     bot.edit_message_reply_markup(chat_id, sent.message_id, reply_markup=markups.get_draft_markup(sent.message_id))
 
-# --- Next Step Handlers ---
 def process_ad_step(message):
-    if message.text == "❌ Отмена": return
+    if message.text == "❌ Отмена": 
+        bot.send_message(message.chat.id, "Отменено.", reply_markup=markups.get_main_menu())
+        return
     utils.save_ad_text(message.text)
     bot.send_message(message.chat.id, "Реклама сохранена!", reply_markup=markups.get_main_menu())
 
 def process_add_channel_step(message):
-    if message.text == "❌ Отмена": return
+    if message.text == "❌ Отмена":
+        bot.send_message(message.chat.id, "Отменено.", reply_markup=markups.get_main_menu())
+        return
     new_ch = message.text.strip()
     if not new_ch.startswith('@'): new_ch = '@' + new_ch
     with open("channels.txt", "a", encoding="utf-8") as f: f.write(new_ch + "\n")
     bot.send_message(message.chat.id, f"Канал {new_ch} добавлен!", reply_markup=markups.get_main_menu())
 
 def save_edited_text(message, target_id, chat_id, is_queue=False, post_id=None):
-    if message.text == "❌ Отмена": return
+    if message.text == "❌ Отмена": 
+        bot.send_message(chat_id, "Отменено.", reply_markup=markups.get_main_menu())
+        return
     if is_queue:
         database.update_post_text(post_id, message.text)
         show_queue_page(chat_id, 0)
@@ -235,7 +230,9 @@ def save_edited_text(message, target_id, chat_id, is_queue=False, post_id=None):
             send_draft_preview(chat_id, draft)
 
 def process_exact_time(message, draft_id, chat_id, is_queue=False, post_id=None):
-    if message.text == "❌ Отмена": return
+    if message.text == "❌ Отмена":
+        bot.send_message(chat_id, "Отменено.", reply_markup=markups.get_main_menu())
+        return
     try:
         tashkent_tz = pytz.timezone('Asia/Tashkent')
         ts = int(tashkent_tz.localize(datetime.strptime(message.text, "%d.%m.%Y %H:%M")).timestamp())
@@ -248,7 +245,7 @@ def process_exact_time(message, draft_id, chat_id, is_queue=False, post_id=None)
                 database.add_to_queue(draft['photo'], draft['text'], draft['document'], draft['channel'], ts)
                 database.clear_draft(message.from_user.id)
                 bot.send_message(chat_id, "Запланировано!", reply_markup=markups.get_main_menu())
-    except: bot.send_message(chat_id, "Ошибка формата.")
+    except: bot.send_message(chat_id, "Ошибка формата. Используй ДД.ММ.ГГГГ ЧЧ:ММ")
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
@@ -273,7 +270,6 @@ def callback_handler(call):
                 show_queue_page(chat_id, 0, call.message.message_id)
         elif action == 'time':
             bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_publish_queue_menu(val, "qtime_"))
-    
     elif call.data.startswith('qtime_'):
         parts = call.data.split('_')
         action, val, post_id = parts[1], int(parts[2]), int(parts[3])
@@ -283,7 +279,6 @@ def callback_handler(call):
         elif action == 'exact':
             msg = bot.send_message(chat_id, "Введи время (ДД.ММ.ГГГГ ЧЧ:ММ):", reply_markup=markups.get_cancel_markup())
             bot.register_next_step_handler(msg, process_exact_time, None, chat_id, True, post_id)
-
     elif call.data == "rewrite_menu": bot.edit_message_reply_markup(chat_id, call.message.message_id, reply_markup=markups.get_rewrite_menu())
     elif call.data.startswith("rw_"):
         draft = database.get_draft(user_id)

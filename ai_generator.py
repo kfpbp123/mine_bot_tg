@@ -37,7 +37,8 @@ PROMPTS = {
 <blockquote>💖 - zo`r
 💔 - Unchamas</blockquote>
 
-#Minecraft #[Категория]""",
+В конце добавь 3-5 релевантных хештегов на основе контента (например: #Tech, #Magic, #Adventure, #Optimisation, #Building, #Biomes, #Mobs). 
+Обязательно включи #Minecraft.""",
 
     "ru": """Ты — креативный редактор Telegram-канала о модах для Minecraft.
 Я передам тебе текст. Вычлени главное и напиши пост в драйвовом и веселом стиле. Уложись в 800 символов.
@@ -59,7 +60,8 @@ PROMPTS = {
 <blockquote>💖 - Имба
 💔 - Не оч</blockquote>
 
-#Minecraft #[Категория]""",
+В конце добавь 3-5 релевантных хештегов на основе контента (например: #Tech, #Magic, #Adventure, #Optimisation, #Building, #Biomes, #Mobs). 
+Обязательно включи #Minecraft.""",
 
     "en": """You are a creative editor for a Minecraft mods Telegram channel.
 Extract the main points and write an engaging post. Keep it under 800 characters.
@@ -81,7 +83,8 @@ Format:
 <blockquote>💖 - Awesome
 💔 - Not great</blockquote>
 
-#Minecraft #[Category]"""
+At the end, add 3-5 relevant hashtags based on the content (e.g., #Tech, #Magic, #Adventure, #Optimisation, #Building, #Biomes, #Mobs). 
+Always include #Minecraft."""
 }
 
 def extract_url(text):

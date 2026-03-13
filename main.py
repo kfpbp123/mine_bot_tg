@@ -52,8 +52,8 @@ def send_welcome(message):
     greeting = utils.get_time_greeting()
     bot.send_message(message.chat.id, f"🌟 <b>{greeting}!</b>\n\nЯ твой профессиональный менеджер Minecraft-канала. Отправь мне данные для нового поста!", reply_markup=markups.get_main_menu(), parse_mode='HTML')
 
-@bot.message_handler(content_types=['text', 'photo'])
-def handle_text_photo(message):
+@bot.message_handler(content_types=['text', 'photo', 'document', 'video', 'audio'])
+def handle_text_photo_file(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
@@ -61,6 +61,27 @@ def handle_text_photo(message):
         if message.text and not message.text.startswith('/'):
             database.save_comment(message.from_user.first_name, message.text, int(time.time()))
         return
+
+    # --- ОБРАБОТКА REPLY (ПРИКРЕПЛЕНИЕ ФАЙЛОВ) ---
+    if message.reply_to_message:
+        file_id = None
+        if message.document: file_id = message.document.file_id
+        elif message.video: file_id = message.video.file_id
+        elif message.audio: file_id = message.audio.file_id
+        elif message.photo: file_id = message.photo[-1].file_id
+        
+        if file_id:
+            bot.send_chat_action(chat_id, 'upload_document')
+            draft = database.get_draft(user_id)
+            if draft:
+                if message.photo:
+                    draft['photo'] = file_id
+                else:
+                    draft['document'] = file_id
+                database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1 if draft.get('ad_added') else 0)
+                bot.reply_to(message, "✅ Файл успешно прикреплен к посту!")
+                send_draft_preview(chat_id, draft)
+                return
 
     state_data = user_states.get(chat_id)
     if state_data and state_data.get('state') == 'ai_chat':
@@ -84,12 +105,14 @@ def handle_text_photo(message):
             lang, _ = database.get_user_settings(user_id)
             bot.send_message(chat_id, f"🌐 <b>Текущий язык: {lang.upper()}</b>", reply_markup=markups.get_language_menu(), parse_mode='HTML')
         elif text == "📋 Очередь":
+            bot.send_chat_action(chat_id, 'typing')
             show_queue_page(chat_id, 0)
         elif text == "📊 Статистика":
             core.show_stats(chat_id, len(utils.get_channels()))
         elif text == "⚙️ Настройки":
             bot.send_message(chat_id, "🛠 <b>Настройки:</b>", reply_markup=markups.get_settings_menu(), parse_mode='HTML')
         elif text == "🧐 Анализ":
+            bot.send_chat_action(chat_id, 'typing')
             msg = bot.send_message(chat_id, "🔍 <b>Анализирую...</b>", parse_mode='HTML')
             report = comments_analyzer.analyze_comments()
             bot.delete_message(chat_id, msg.message_id)
@@ -100,6 +123,7 @@ def handle_text_photo(message):
             user_states[chat_id] = None
             bot.send_message(chat_id, "🏠 <b>Главное меню</b>", reply_markup=markups.get_main_menu(), parse_mode='HTML')
         else:
+            bot.send_chat_action(chat_id, 'typing')
             if not message.media_group_id:
                 start_generation(chat_id, user_id, text, None)
             elif message.media_group_id not in album_cache:
@@ -108,6 +132,7 @@ def handle_text_photo(message):
             if message.media_group_id: album_cache[message.media_group_id].append(message)
     
     elif message.photo:
+        bot.send_chat_action(chat_id, 'upload_photo')
         if not message.media_group_id:
             start_generation(chat_id, user_id, message.caption, message.photo[-1].file_id)
         elif message.media_group_id not in album_cache:
@@ -148,15 +173,22 @@ def start_generation(chat_id, user_id, user_input, photo_id, is_album=False):
     send_draft_preview(chat_id, draft)
 
 def send_draft_preview(chat_id, draft):
+    bot.send_chat_action(chat_id, 'typing')
+    doc_info = f"\n\n📄 <b>Прикреплен файл:</b> Да" if draft.get('document') else ""
+    full_text = draft['text'] + doc_info
+    
     if draft['photo'] and ',' in draft['photo']:
         bot.send_media_group(chat_id, [telebot.types.InputMediaPhoto(m) for m in draft['photo'].split(',')])
-        sent = bot.send_message(chat_id, draft['text'], parse_mode='HTML')
+        sent = bot.send_message(chat_id, full_text, parse_mode='HTML')
     elif draft['photo']:
-        if len(draft['text']) <= 1024: sent = bot.send_photo(chat_id, draft['photo'], caption=draft['text'], parse_mode='HTML')
+        if len(full_text) <= 1024: 
+            sent = bot.send_photo(chat_id, draft['photo'], caption=full_text, parse_mode='HTML')
         else:
             bot.send_photo(chat_id, draft['photo'])
-            sent = bot.send_message(chat_id, draft['text'], parse_mode='HTML')
-    else: sent = bot.send_message(chat_id, draft['text'], parse_mode='HTML')
+            sent = bot.send_message(chat_id, full_text, parse_mode='HTML')
+    else: 
+        sent = bot.send_message(chat_id, full_text, parse_mode='HTML')
+    
     bot.edit_message_reply_markup(chat_id, sent.message_id, reply_markup=markups.get_draft_markup(sent.message_id))
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -212,6 +244,39 @@ def callback_handler(call):
             draft['text'] = ai_generator.rewrite_post(draft['text'], call.data.split("_")[1])
             database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'])
             finalize_draft_update(chat_id, call.message.message_id, draft)
+
+    elif call.data == "edit_text":
+        msg = bot.send_message(chat_id, "📝 Введи новый текст для поста:", reply_markup=markups.get_cancel_markup())
+        bot.register_next_step_handler(msg, save_edited_text, call.message.message_id, chat_id)
+
+    elif call.data == "add_to_smart_q":
+        draft = database.get_draft(user_id)
+        if draft:
+            last_time = database.get_last_scheduled_time()
+            now = int(time.time())
+            interval = config.SMART_QUEUE_INTERVAL_HOURS * 3600
+            
+            if not last_time or last_time < now:
+                new_time = now + 3600 
+            else:
+                new_time = last_time + interval
+            
+            database.add_to_queue(draft['photo'], draft['text'], draft['document'], draft['channel'], new_time)
+            database.clear_draft(user_id)
+            bot.answer_callback_query(call.id, f"✅ Добавлено в умную очередь на {datetime.fromtimestamp(new_time).strftime('%d.%m %H:%M')}")
+            bot.delete_message(chat_id, call.message.message_id)
+
+    elif call.data == "add_ad":
+        ad_text = utils.get_ad_text()
+        draft = database.get_draft(user_id)
+        if draft and not draft.get('ad_added'):
+            draft['text'] += f"\n\n{ad_text}"
+            draft['ad_added'] = True
+            database.save_draft(user_id, draft['photo'], draft['text'], draft['document'], draft['channel'], 1)
+            finalize_draft_update(chat_id, call.message.message_id, draft)
+            bot.answer_callback_query(call.id, "✅ Реклама добавлена")
+        else:
+            bot.answer_callback_query(call.id, "⚠️ Реклама уже есть или черновик пуст")
 
     elif call.data == "pub_now":
         draft = database.get_draft(user_id)

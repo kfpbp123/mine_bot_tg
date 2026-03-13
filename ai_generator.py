@@ -1,4 +1,5 @@
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import config
 import re
 import requests
@@ -6,7 +7,7 @@ from bs4 import BeautifulSoup
 
 # Настройка API
 genai.configure(api_key=config.GEMINI_KEY)
-MODEL_ID = "gemini-1.5-flash"
+MODEL_ID = "gemini-2.0-flash"
 model = genai.GenerativeModel(MODEL_ID)
 
 PROMPTS = {
@@ -86,7 +87,14 @@ def fetch_page_content(url):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
+        
+        # Улучшение: вытаскиваем описание из meta-тегов
+        text = ""
+        meta_desc = soup.find("meta", attrs={"name": "description"})
+        if meta_desc:
+            text += meta_desc.get("content", "") + " "
+            
+        text += soup.get_text(separator=' ', strip=True)
         return text[:5000] 
     except Exception as e:
         print(f"⚠️ Не смог прочитать сайт {url}: {e}")
@@ -106,28 +114,38 @@ def generate_post(user_input, persona="uz"):
     full_prompt = f"{system_prefix}{selected_prompt}\n\nСырая информация:\n{user_input}{site_context}"
     
     try:
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        }
+
         response = model.generate_content(
             full_prompt,
-            safety_settings={
-                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
-                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
-                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
-            }
+            safety_settings=safety_settings
         )
         
-        # Проверка на наличие текста (защита от пустых ответов из-за фильтров)
-        if not response.candidates or not response.text:
-            return "⚠️ ИИ заблокировал описание. Попробуйте убрать слишком резкие слова или дайте прямую ссылку на мод."
+        # Проверка на наличие ответа
+        if not response.candidates:
+            return "⚠️ Gemini error: Ответ пуст (возможно, из-за фильтров безопасности)."
 
-        final_text = response.text.strip()
+        # Получаем текст безопасно
+        try:
+            final_text = response.text.strip()
+        except Exception:
+            # Если .text недоступен (например, из-за блокировки), пробуем достать из контента
+            try:
+                final_text = response.candidates[0].content.parts[0].text.strip()
+            except:
+                return "⚠️ Gemini error: Не удалось извлечь текст из ответа."
+
         # Заменяем Markdown жирный на HTML жирный
         final_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', final_text)
         return final_text
 
     except Exception as e:
-        print(f"❌ Ошибка генерации: {e}")
-        return "⚠️ Ошибка при создании поста. Скорее всего, сработал фильтр безопасности."
+        return f"❌ Gemini error: {e}"
     
     return "⚠️ Не удалось создать пост. Попробуйте еще раз с другой ссылкой или описанием."
 
@@ -140,6 +158,6 @@ def rewrite_post(text, style="short"):
 
 def chat_with_ai(user_message):
     try:
-        response = model.generate_content(f"Ты помощник админа канала Minecraft. Отвечай кратко: {user_message}")
+        response = model.generate_content(f"Ты помощник админа. Запоминай контекст и личные данны. Отвечай кратко: {user_message}")
         return response.text.strip()
     except: return "Ошибка чата."

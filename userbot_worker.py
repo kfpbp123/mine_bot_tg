@@ -26,6 +26,13 @@ import sqlite3
 # Настройки юзербота
 EXCLUDED_CHANNELS = ["lab_mine", "AstralUZmods"]
 KEYWORDS = ["mine", "craft", "mod", "mcpe", "mcpdl"] # Ключевые слова для каналов Minecraft
+WHITELIST_CHANNELS = [
+    "minecraft_modyy", 
+    "InfinitMinecraft",
+    "I7QhTxE2OcxlZWQy", # Хвосты от приватных ссылок
+    "v6PY3UuUQndhYzg6",
+    "Ix-HoEUPSAU2YzQy"
+]
 DEFAULT_LANG = "uz" # Язык для авто-постов
 AUTO_POST_LIMIT = 6 # Сколько модов искать за раз
 
@@ -46,9 +53,16 @@ def is_duplicate(doc_id):
         return False
 
 def is_minecraft_channel(chat):
-    """Проверяет, относится ли канал к тематике Minecraft."""
+    """Проверяет, относится ли канал к тематике Minecraft или находится в белом списке."""
     title = (chat.title or "").lower()
     username = (chat.username or "").lower()
+    invite_link = (chat.invite_link or "").lower()
+    
+    # Проверка по белому списку (юзернейм или часть инвайт-ссылки)
+    if any(target.lower() in username or target.lower() in invite_link for target in WHITELIST_CHANNELS):
+        return True
+        
+    # Проверка по ключевым словам
     return any(word in title or word in username for word in KEYWORDS)
 
 async def process_and_queue_mod(message, channel_username):

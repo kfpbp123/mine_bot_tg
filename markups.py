@@ -28,9 +28,8 @@ def get_settings_menu(lang='uz'):
         
     markup.add(
         InlineKeyboardButton("📢 Ad Text", callback_data="set_ad_text"),
-        InlineKeyboardButton("➕ Add Channel", callback_data="add_new_channel")
+        InlineKeyboardButton("💾 Backup DB", callback_data="db_backup")
     )
-    markup.add(InlineKeyboardButton("💾 Backup DB", callback_data="db_backup"))
     markup.add(InlineKeyboardButton("📥 Export CSV", callback_data="csv_export"))
     return markup
 

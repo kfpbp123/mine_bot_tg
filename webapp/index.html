@@ -111,7 +111,7 @@
         function renderQueue(posts) {
             const list = document.getElementById('queue-list');
             if (posts.length === 0) {
-                list.innerHTML = '<p class="text-hint text-center py-10">Queue is empty</p>';
+                list.innerHTML = '<div class="col-span-full text-hint text-center py-20">Queue is empty</div>';
                 return;
             }
 
@@ -119,19 +119,60 @@
                 const date = new Date(post.scheduled_time * 1000).toLocaleString('ru-RU', {
                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
                 });
-                const preview = post.text.replace(/<[^>]*>?/gm, '').substring(0, 100);
                 
-                return `
-                    <div class="card p-4">
-                        <div class="flex justify-between items-start mb-2">
-                            <span class="text-xs font-mono text-hint">${date}</span>
-                            <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">Pending</span>
+                // Формируем индикаторы вложений
+                let attachmentsHtml = '';
+                if (post.photo_id) {
+                    const isAlbum = post.photo_id.includes(',');
+                    attachmentsHtml += `
+                        <div class="bg-blue-500/10 text-blue-500 p-3 rounded-lg flex items-center mb-3">
+                            <i data-lucide="${isAlbum ? 'layers' : 'image'}" class="w-5 h-5 mr-2"></i>
+                            <span class="text-sm font-semibold">${isAlbum ? 'Photo Album' : 'Photo Attached'}</span>
                         </div>
-                        <p class="text-sm mb-4 italic">"${preview}..."</p>
-                        <div class="flex space-x-2">
-                            <button onclick="openEdit(${post.id}, \`${post.text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" class="flex-1 py-1 text-sm border border-blue-500 text-blue-500 rounded">Edit</button>
-                            <button onclick="publishNow(${post.id})" class="flex-1 py-1 text-sm bg-green-500 text-white rounded">Pub</button>
-                            <button onclick="deletePost(${post.id})" class="p-1 text-red-500"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                    `;
+                }
+                if (post.document_id) {
+                    attachmentsHtml += `
+                        <div class="bg-amber-500/10 text-amber-500 p-3 rounded-lg flex items-center mb-3">
+                            <i data-lucide="file-text" class="w-5 h-5 mr-2"></i>
+                            <span class="text-sm font-semibold">Document/File</span>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="card overflow-hidden flex flex-col">
+                        <!-- Post Header -->
+                        <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div class="flex items-center">
+                                <i data-lucide="send" class="w-4 h-4 mr-2 text-hint"></i>
+                                <span class="text-xs font-bold uppercase tracking-tighter text-hint">${post.channel}</span>
+                            </div>
+                            <span class="text-xs font-mono bg-white px-2 py-1 rounded shadow-sm">${date}</span>
+                        </div>
+
+                        <!-- Post Body -->
+                        <div class="p-5 flex-1">
+                            ${attachmentsHtml}
+                            <div class="text-sm whitespace-pre-wrap leading-relaxed opacity-90 mb-4 font-sans">
+                                ${post.text.replace(/<[^>]*>?/gm, '')}
+                            </div>
+                        </div>
+
+                        <!-- Post Footer (Actions) -->
+                        <div class="p-4 bg-gray-50/50 border-t border-gray-100 flex space-x-2">
+                            <button onclick="openEdit(${post.id}, \`${post.text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" 
+                                    class="flex-1 bg-white border border-blue-200 text-blue-600 py-2 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors">
+                                Edit
+                            </button>
+                            <button onclick="publishNow(${post.id})" 
+                                    class="flex-1 bg-green-500 text-white py-2 rounded-lg text-sm font-bold hover:bg-green-600 shadow-sm transition-all">
+                                Publish Now
+                            </button>
+                            <button onclick="deletePost(${post.id})" 
+                                    class="w-12 flex items-center justify-center bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all">
+                                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                            </button>
                         </div>
                     </div>
                 `;

@@ -2,9 +2,12 @@ import sqlite3
 import time
 import os
 
-DB_PATH = os.getenv("DB_PATH", "bot_data.db")
+# Используем абсолютный путь к БД
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "bot_data.db"))
 
 def init_db():
+    print(f"🗄️ Initializing database at: {DB_PATH}")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     # Основная таблица очереди и постов

@@ -75,4 +75,8 @@ async def publish_now(post_id: int):
 
 def run_api():
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    print(f"📡 Starting Web API on port {port}...")
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    except Exception as e:
+        print(f"❌ Uvicorn failed: {e}")

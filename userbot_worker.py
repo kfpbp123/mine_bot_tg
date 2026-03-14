@@ -145,6 +145,28 @@ async def manual_scan(client, message):
     await auto_scan_and_post()
     await message.delete()
 
+@app.on_message(filters.me & filters.command("test", prefixes="."))
+async def manual_test(client, message):
+    """Тестовое создание поста. Если есть реплай - берет его, если нет - создает заглушку."""
+    target = message.reply_to_message if message.reply_to_message else message
+    
+    await message.edit_text("🧪 Тестовый запуск: Обработка сообщения...")
+    
+    # Если в сообщении нет текста и это не реплай с файлом, добавим текст для ИИ
+    if not target.text and not target.caption and not target.document:
+        test_text = "Тестовый мод на супер-прыжок для Minecraft 1.21. Добавляет сапоги-прыгуны."
+        # Имитируем сообщение с текстом
+        target.text = test_text
+
+    success = await process_and_queue_mod(target, "Test_Manual")
+    
+    if success:
+        await message.edit_text("✅ Тестовый пост успешно создан и добавлен в очередь!")
+        await asyncio.sleep(3)
+        await message.delete()
+    else:
+        await message.edit_text("❌ Ошибка при создании тестового поста. Проверьте логи.")
+
 @app.on_message(filters.me & filters.command("report", prefixes="."))
 async def simple_report(client, message):
     """Старая функция краткого отчета (для удобства)"""

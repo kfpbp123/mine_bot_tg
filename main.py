@@ -69,15 +69,25 @@ def send_welcome(message):
     text = MESSAGES[lang]['welcome']
     bot.send_message(message.chat.id, text, reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
 
-@bot.message_handler(content_types=['text', 'photo', 'document', 'video', 'audio'])
+@bot.message_handler(content_types=['text', 'photo', 'document', 'video', 'audio', 'voice'])
 def handle_text_photo_file(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     lang = get_user_lang(user_id)
+    text = message.text if message.content_type == 'text' else None
+
+    # DEBUG LOG
+    if text: print(f"📩 [{chat_id}] Message: {text}")
 
     if message.chat.type in ['group', 'supergroup']:
-        if message.text and not message.text.startswith('/'):
-            database.save_comment(message.from_user.first_name, message.text, int(time.time()))
+        if text and not text.startswith('/'):
+            database.save_comment(message.from_user.first_name, text, int(time.time()))
+        return
+
+    # СРАЗУ ПРОВЕРЯЕМ ОТМЕНУ (ВЫСШИЙ ПРИОРИТЕТ)
+    if text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]:
+        user_states[chat_id] = None
+        bot.send_message(chat_id, MESSAGES[lang]['ai_chat_off'], reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
         return
 
     # --- ОБРАБОТКА REPLY ---
@@ -101,11 +111,6 @@ def handle_text_photo_file(message):
 
     state_data = user_states.get(chat_id)
     if state_data and state_data.get('state') == 'ai_chat':
-        if message.text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]:
-            user_states[chat_id] = None
-            bot.send_message(chat_id, MESSAGES[lang]['ai_chat_off'], reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
-            return
-        
         bot.send_chat_action(chat_id, 'typing')
         stats = database.get_stats()
         channel = utils.get_active_channel(user_id)
@@ -144,9 +149,6 @@ def handle_text_photo_file(message):
             markup = telebot.types.InlineKeyboardMarkup()
             markup.add(telebot.types.InlineKeyboardButton("🗑 Clear", callback_data="clear_comments_db"))
             bot.send_message(chat_id, report, parse_mode="HTML", reply_markup=markup)
-        elif text in [BUTTONS['uz']['cancel'], BUTTONS['ru']['cancel'], BUTTONS['en']['cancel']]:
-            user_states[chat_id] = None
-            bot.send_message(chat_id, "🏠", reply_markup=markups.get_main_menu(lang), parse_mode='HTML')
         else:
             bot.send_chat_action(chat_id, 'typing')
             if not message.media_group_id:

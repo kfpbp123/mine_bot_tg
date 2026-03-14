@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mine Bot Management</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: var(--tg-theme-bg-color, #f3f4f6);
+            color: var(--tg-theme-text-color, #1f2937);
+        }
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color, #ffffff);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background-color: var(--tg-theme-button-color, #3b82f6);
+            color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        .text-hint {
+            color: var(--tg-theme-hint-color, #9ca3af);
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div id="app" class="max-w-md mx-auto">
+        <!-- Dashboard -->
+        <header class="mb-6">
+            <h1 class="text-2xl font-bold mb-4">Mine Bot Dashboard</h1>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="card p-4 flex flex-col items-center">
+                    <span class="text-hint text-sm mb-1">Queue</span>
+                    <span id="stat-queue" class="text-2xl font-bold">0</span>
+                </div>
+                <div class="card p-4 flex flex-col items-center">
+                    <span class="text-hint text-sm mb-1">Today</span>
+                    <span id="stat-today" class="text-2xl font-bold">0</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Queue Section -->
+        <section>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Queue list</h2>
+                <button onclick="fetchData()" class="text-hint"><i data-lucide="refresh-cw" class="w-5 h-5"></i></button>
+            </div>
+            <div id="queue-list" class="space-y-4">
+                <!-- Posts will be here -->
+                <p class="text-hint text-center py-10">Loading...</p>
+            </div>
+        </section>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
+        <div class="card w-full max-w-md p-6">
+            <h3 class="text-lg font-bold mb-4">Edit Post</h3>
+            <textarea id="edit-text" class="w-full h-40 p-3 rounded border mb-4 text-black" placeholder="Post text..."></textarea>
+            <div class="flex space-x-2">
+                <button onclick="saveEdit()" class="btn-primary flex-1 py-2 rounded font-semibold">Save</button>
+                <button onclick="closeModal()" class="bg-gray-300 text-gray-800 flex-1 py-2 rounded font-semibold">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let currentPostId = null;
+        // const API_URL = 'http://localhost:8000'; // Для локальной разработки
+        const API_URL = ''; // Будет работать на том же домене/порту
+
+        async function fetchData() {
+            try {
+                // Stats
+                const statsRes = await fetch(`${API_URL}/api/stats`);
+                const stats = await statsRes.json();
+                document.getElementById('stat-queue').innerText = stats.queue;
+                document.getElementById('stat-today').innerText = stats.today;
+
+                // Queue
+                const queueRes = await fetch(`${API_URL}/api/queue`);
+                const queue = await queueRes.json();
+                renderQueue(queue);
+            } catch (e) {
+                console.error('Fetch error:', e);
+            }
+        }
+
+        function renderQueue(posts) {
+            const list = document.getElementById('queue-list');
+            if (posts.length === 0) {
+                list.innerHTML = '<p class="text-hint text-center py-10">Queue is empty</p>';
+                return;
+            }
+
+            list.innerHTML = posts.map(post => {
+                const date = new Date(post.scheduled_time * 1000).toLocaleString('ru-RU', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                });
+                const preview = post.text.replace(/<[^>]*>?/gm, '').substring(0, 100);
+                
+                return `
+                    <div class="card p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-mono text-hint">${date}</span>
+                            <span class="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">Pending</span>
+                        </div>
+                        <p class="text-sm mb-4 italic">"${preview}..."</p>
+                        <div class="flex space-x-2">
+                            <button onclick="openEdit(${post.id}, \`${post.text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" class="flex-1 py-1 text-sm border border-blue-500 text-blue-500 rounded">Edit</button>
+                            <button onclick="publishNow(${post.id})" class="flex-1 py-1 text-sm bg-green-500 text-white rounded">Pub</button>
+                            <button onclick="deletePost(${post.id})" class="p-1 text-red-500"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function openEdit(id, text) {
+            currentPostId = id;
+            document.getElementById('edit-text').value = text;
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+
+        async function saveEdit() {
+            const newText = document.getElementById('edit-text').value;
+            await fetch(`${API_URL}/api/queue/${currentPostId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: newText})
+            });
+            closeModal();
+            fetchData();
+        }
+
+        async function deletePost(id) {
+            if (!confirm('Delete this post?')) return;
+            await fetch(`${API_URL}/api/queue/${id}`, {method: 'DELETE'});
+            fetchData();
+        }
+
+        async function publishNow(id) {
+            tg.MainButton.setText('Publishing...');
+            tg.MainButton.show();
+            await fetch(`${API_URL}/api/queue/${id}/publish`, {method: 'POST'});
+            tg.MainButton.hide();
+            fetchData();
+        }
+
+        window.onload = () => {
+            fetchData();
+            lucide.createIcons();
+        };
+    </script>
+</body>
+</html>

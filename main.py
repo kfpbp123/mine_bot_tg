@@ -17,6 +17,11 @@ import pytz
 from datetime import datetime, timedelta
 from bot_instance import bot
 from strings import MESSAGES, BUTTONS
+from webapp.api import run_api
+
+# --- WEB APP (TMA) ---
+api_thread = threading.Thread(target=run_api, daemon=True)
+api_thread.start()
 
 database.init_db()
 album_cache = {}

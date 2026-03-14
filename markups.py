@@ -1,4 +1,4 @@
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 import config
 from strings import BUTTONS
 
@@ -13,6 +13,9 @@ def get_main_menu(lang='uz'):
 
 def get_settings_menu(lang='uz'):
     markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        InlineKeyboardButton("📱 Open Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL))
+    )
     markup.add(
         InlineKeyboardButton("📢 Ad Text", callback_data="set_ad_text"),
         InlineKeyboardButton("➕ Add Channel", callback_data="add_new_channel")

@@ -1,0 +1,78 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+import database
+import config
+import core
+import utils
+import uvicorn
+import os
+from pydantic import BaseModel
+from typing import Optional
+
+app = FastAPI(title="Mine Bot TMA API")
+
+# Разрешаем CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+async def read_index():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
+
+class PostUpdate(BaseModel):
+...
+    scheduled_time: Optional[int] = None
+
+@app.get("/api/stats")
+async def get_stats():
+    return database.get_stats()
+
+@app.get("/api/queue")
+async def get_queue():
+    posts = database.get_all_pending()
+    result = []
+    for p in posts:
+        result.append({
+            "id": p[0],
+            "photo_id": p[1],
+            "text": p[2],
+            "document_id": p[3],
+            "channel": p[4] or config.DEFAULT_CHANNEL,
+            "scheduled_time": p[5]
+        })
+    return result
+
+@app.delete("/api/queue/{post_id}")
+async def delete_post(post_id: int):
+    database.delete_from_queue(post_id)
+    return {"status": "ok"}
+
+@app.put("/api/queue/{post_id}")
+async def update_post(post_id: int, data: PostUpdate):
+    if data.text is not None:
+        database.update_post_text(post_id, data.text)
+    if data.scheduled_time is not None:
+        database.update_post_time(post_id, data.scheduled_time)
+    return {"status": "ok"}
+
+@app.post("/api/queue/{post_id}/publish")
+async def publish_now(post_id: int):
+    posts = database.get_all_pending()
+    post = next((p for p in posts if p[0] == post_id), None)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    # core.publish_post_data(post_id, photo_id, text, document_id, channel_id)
+    success = core.publish_post_data(post[0], post[1], post[2], post[3], post[4] or config.DEFAULT_CHANNEL)
+    if success:
+        return {"status": "ok"}
+    raise HTTPException(status_code=500, detail="Publish failed")
+
+def run_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)

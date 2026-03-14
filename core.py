@@ -3,6 +3,7 @@ import config
 import database
 import os
 import time
+import re
 from bot_instance import bot
 from strings import MESSAGES
 
@@ -29,8 +30,9 @@ def publish_post_data(post_id, photo_id, text, document_id, channel_id, is_auto=
         if post_id != -1:
             database.mark_as_posted(post_id)
             if is_auto:
+                title = re.sub(r'<[^>]+>', '', text).split('\n')[0][:50]
                 for admin in getattr(config, 'ADMIN_IDS', []):
-                    try: bot.send_message(admin, f"✅ <b>Автопостинг:</b> Опубликовано в {channel_id}!", parse_mode='HTML') 
+                    try: bot.send_message(admin, f"✅ <b>Автопостинг:</b> Опубликовано в {channel_id}!\n\n📝 <b>Пост:</b> <i>{title}...</i>", parse_mode='HTML') 
                     except: pass
         return True
     except Exception as e:

@@ -16,8 +16,18 @@ def get_time_greeting():
 
 def format_queue_post(post, index, total):
     post_id, photo_id, text, doc_id, channel, time_sched = post
-    type_icon = "🖼 Фото" if photo_id else "📝 Текст" if not doc_id else "📄 Док"
-    if photo_id and ',' in photo_id: type_icon = "🖼 Альбом"
+    
+    attachments = []
+    if photo_id:
+        if ',' in photo_id: attachments.append("🖼 Альбом")
+        else: attachments.append("🖼 Фото")
+    if doc_id:
+        attachments.append("📄 Файл")
+    
+    if not attachments:
+        type_str = "📝 Только текст"
+    else:
+        type_str = " + ".join(attachments)
 
     tashkent_tz = pytz.timezone('Asia/Tashkent')
     if time_sched:
@@ -33,7 +43,7 @@ def format_queue_post(post, index, total):
     return f"""━━━━━━━━━━━━━
 📦 Пост {index}/{total}
 ━━━━━━━━━━━━━
-{type_icon} <b>Тип:</b> {'Альбом' if photo_id and ',' in photo_id else 'Фото' if photo_id else 'Текст'}
+📎 <b>Вложения:</b> {type_str}
 📢 <b>Канал:</b> {channel or config.DEFAULT_CHANNEL}
 ⏳ <b>Время:</b> {time_str}
 

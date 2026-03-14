@@ -39,6 +39,20 @@ AUTO_POST_LIMIT = 6 # Сколько модов искать за раз
 app = Client("my_userbot", api_id=API_ID, api_hash=API_HASH)
 scheduler = AsyncIOScheduler()
 
+def get_next_schedule_time():
+    """Рассчитывает время для следующего поста в умной очереди (+8 часов от последнего)."""
+    try:
+        last_time = database.get_last_scheduled_time()
+        interval = getattr(config, 'SMART_QUEUE_INTERVAL_HOURS', 8)
+        
+        if not last_time or last_time < int(time.time()):
+            return int(time.time()) + 3600 # Через час, если очередь пуста
+        
+        return last_time + (interval * 3600)
+    except Exception as e:
+        print(f"⚠️ Ошибка при расчете времени: {e}")
+        return int(time.time()) + 3600
+
 def is_duplicate(doc_id):
     """Проверяет, есть ли такой файл уже в базе данных."""
     if not doc_id: return False

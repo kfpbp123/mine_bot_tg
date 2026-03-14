@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 import time
+import sqlite3
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from pyrogram import Client, filters
@@ -21,20 +22,17 @@ load_dotenv()
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
-import sqlite3
-
 # Настройки юзербота
-EXCLUDED_CHANNELS = ["lab_mine", "AstralUZmods"]
-KEYWORDS = ["mine", "craft", "mod", "mcpe", "mcpdl"] # Ключевые слова для каналов Minecraft
+EXCLUDED_CHANNELS = ["lazikosmods", "lab_mine", "AstralUZmods"]
 WHITELIST_CHANNELS = [
     "minecraft_modyy", 
     "InfinitMinecraft",
-    "I7QhTxE2OcxlZWQy", # Хвосты от приватных ссылок
+    "I7QhTxE2OcxlZWQy", 
     "v6PY3UuUQndhYzg6",
     "Ix-HoEUPSAU2YzQy"
 ]
-DEFAULT_LANG = "uz" # Язык для авто-постов
-AUTO_POST_LIMIT = 6 # Сколько модов искать за раз
+DEFAULT_LANG = "uz" 
+AUTO_POST_LIMIT = 6 
 
 app = Client("my_userbot", api_id=API_ID, api_hash=API_HASH)
 scheduler = AsyncIOScheduler()
@@ -66,24 +64,30 @@ def is_duplicate(doc_id):
     except:
         return False
 
-def is_minecraft_channel(chat):
-    """Проверяет, относится ли канал к тематике Minecraft или находится в белом списке."""
-    title = (chat.title or "").lower()
+def is_target_channel(chat):
+    """Проверяет, входит ли канал в строго заданный белый список."""
     username = (chat.username or "").lower()
     invite_link = (chat.invite_link or "").lower()
     
-    # Проверка по белому списку (юзернейм или часть инвайт-ссылки)
+    # Сначала проверяем, не наш ли это канал
+    if any(ex.lower() in username for ex in EXCLUDED_CHANNELS):
+        return False
+
+    # Проверка по белому списку
     if any(target.lower() in username or target.lower() in invite_link for target in WHITELIST_CHANNELS):
         return True
-        
-    # Проверка по ключевым словам
-    return any(word in title or word in username for word in KEYWORDS)
+    return False
 
 async def process_and_queue_mod(message, channel_username):
     """Обрабатывает сообщение, генерирует пост и кладет в базу данных основного бота."""
     try:
+        # СТРОГОЕ УСЛОВИЕ: Должен быть файл (мод)
+        if not (message.document or message.video):
+            return False
+
+        doc_id = message.document.file_id if message.document else message.video.file_id
+        
         # Проверяем на дубликат по файлу
-        doc_id = message.document.file_id if message.document else (message.video.file_id if message.video else None)
         if is_duplicate(doc_id):
             print(f"⏩ Пропуск: файл из @{channel_username} уже в базе.")
             return False
@@ -124,32 +128,28 @@ async def process_and_queue_mod(message, channel_username):
 
 async def auto_scan_and_post():
     """Раз в 24 часа ищет 6 новых модов и ставит их в очередь."""
-    print(f"[{datetime.now()}] Старт авто-сканирования...")
+    print(f"[{datetime.now()}] Старт авто-сканирования (СТРОГИЙ ФИЛЬТР)...")
     mods_found = 0
     
     async for dialog in app.get_dialogs():
         if mods_found >= AUTO_POST_LIMIT:
             break
             
-        if dialog.chat.type.value == "channel":
-            if not is_minecraft_channel(dialog.chat):
-                continue
-                
-            username = dialog.chat.username
-            if not username or username in EXCLUDED_CHANNELS:
-                continue
+        if dialog.chat.type.value == "channel" and is_target_channel(dialog.chat):
+            username = dialog.chat.username or "Private_Channel"
+            print(f"🔎 Сканирую: @{username}")
             
-            # Ищем свежие посты за последние 24 часа
-            async for message in app.get_chat_history(dialog.chat.id, limit=20):
+            # Ищем свежие посты за последние 48 часов
+            async for message in app.get_chat_history(dialog.chat.id, limit=30):
                 if mods_found >= AUTO_POST_LIMIT:
                     break
                 
-                # Нам нужны посты с файлами
-                if (message.document or message.video) and (message.date > datetime.now() - timedelta(days=1)):
+                # Нам нужны ТОЛЬКО посты с документами (файлами)
+                if (message.document or message.video) and (message.date > datetime.now() - timedelta(days=2)):
                     success = await process_and_queue_mod(message, username)
                     if success:
                         mods_found += 1
-                        await asyncio.sleep(5) # Пауза для стабильности
+                        await asyncio.sleep(5) 
     
     print(f"Финиш: Добавлено {mods_found} новых модов.")
 

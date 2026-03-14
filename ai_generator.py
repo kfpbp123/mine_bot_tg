@@ -17,33 +17,33 @@ groq_client = Groq(api_key=config.GROQ_API_KEY)
 GROQ_MODEL_ID = "llama-3.3-70b-versatile"
 
 PROMPTS = {
-    "uz": """Ты — креативный редактор Telegram-канала о модах для Minecraft.
-Я передам тебе текст. Вычлени главное и напиши пост. Уложись в 800 символов.
-Пиши ТОЛЬКО на узбекском языке (латиница). 
-ВАЖНО: Переводи КАЖДОЕ слово на узбекский. Не оставляй русские слова. Например: 'Бессмертие' -> 'O'lmaslik', 'Магия' -> 'Sehr', 'Приключение' -> 'Sarguzasht'.
-Если термин технический, адаптируй его, но чтобы он звучал по-узбекски.
-Если не смог найти версию напиши "1.21+".
-Используй тег <blockquote expandable> для основного блока. Перепиши текст в более веселом, драйвовом и геймерском стиле. Добавь чуть больше эмодзи.
+    "uz": """Sen Minecraft modlari haqidagi Telegram kanali uchun kreativ redaktorsan.
+Senga matn va fayl nomi beriladi. Asosiy ma'lumotlarni ajratib ol va post yoz.
+DIQQAT: Agar matn Minecraft modiga tegishli bo'lmasa (masalan: reklama, boshqa o'yinlar, konkurslar), faqat bitta so'z qaytar: "REJECT".
 
-Формат:
-📦 <b>[Название]</b>
+Qoidalar:
+1. FAQAT O'zbek tilida yoz (lotin alifbosi).
+2. AGAR matnda "Sehr" (Magic) yoki "O'lmaslik" (Immortality) haqida gap bo'lmasa, BU SO'ZLARNI ISHLATMA.
+3. Modning haqiqiy vazifasini yoz. Agar ma'lumot kam bo'lsa, fayl nomiga qara.
+4. Sarlavha (📦 [Nomi]) aniq va qisqa bo'lsin.
+5. <blockquote expandable> tegidan foydalan.
+
+Format:
+📦 <b>[Aniq nomi]</b>
 
 <blockquote expandable><b>Bu nima?</b>
-[Описание]
+[Modning aniq vazifasi haqida 1-2 gap]
 
 <b>Asosiy xususiyatlar:</b>
-• [Фишка 1]
-• [Фишка 2]
+• [Haqiqiy xususiyat 1]
+• [Haqiqiy xususiyat 2]
 
-🎮 Versiya: [Версия]</blockquote>
+🎮 Versiya: [Versiya yoki 1.21+]</blockquote>
 
-<blockquote>💖 - zo`r
-💔 - Unchamas</blockquote>
+<blockquote>💖 - juda zo'r
+💔 - unchamas</blockquote>
 
-В конце добавь 3-5 ОБЩИХ релевантных хештегов. 
-КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать название мода в хэштегах. 
-Используй только широкие категории (например: #Minecraft, #Magic, #Anime, #Tech, #Optimisation, #Building, #Biomes, #Mobs, #Survival, #Adventure).
-Обязательно включи #Minecraft.""",
+Xeshteglar: faqat 3-5 ta umumiy (masalan: #Minecraft #Survival #Tech).""",
 
     "ru": """Ты — креативный редактор Telegram-канала о модах для Minecraft.
 Я передам тебе текст. Вычлени главное и напиши пост в драйвовом и веселом стиле. Уложись в 800 символов.

@@ -24,6 +24,8 @@ API_HASH = os.getenv("API_HASH")
 
 # Настройки юзербота
 EXCLUDED_CHANNELS = ["lazikosmods", "lab_mine", "AstralUZmods"]
+AD_KEYWORDS = ["реклама", "priz", "konkurs", "game", "o'yin", "pul", "money", "tg_app"] # Черный список слов
+
 WHITELIST_CHANNELS = [
     "minecraft_modyy", 
     "InfinitMinecraft",
@@ -85,18 +87,31 @@ async def process_and_queue_mod(message, channel_username):
         if not (message.document or message.video):
             return False
 
+        # ПРОВЕРКА НА РЕКЛАМУ ПО КЛЮЧЕВЫМ СЛОВАМ
+        raw_text = (message.text or message.caption or "").lower()
+        if any(ad in raw_text for ad in AD_KEYWORDS):
+            print(f"⏩ Пропуск: Пост из @{channel_username} похож на рекламу.")
+            return False
+
         doc_id = message.document.file_id if message.document else message.video.file_id
+        file_name = message.document.file_name if message.document else "mod_file"
         
         # Проверяем на дубликат по файлу
         if is_duplicate(doc_id):
             print(f"⏩ Пропуск: файл из @{channel_username} уже в базе.")
             return False
 
-        text = message.text or message.caption or "Minecraft Mod"
+        # Формируем расширенный ввод для ИИ (текст + имя файла)
+        ai_input = f"Fayl nomi: {file_name}\nMatn: {raw_text}"
         
         # 1. Генерируем текст в стиле основного бота
-        ai_text = ai_generator.generate_post(text, DEFAULT_LANG)
+        ai_text = ai_generator.generate_post(ai_input, DEFAULT_LANG)
         
+        # ЕСЛИ ИИ ОТКЛОНИЛ ПОСТ (REJECT)
+        if "REJECT" in ai_text.upper():
+            print(f"⏩ Пропуск: ИИ определил пост из @{channel_username} как мусор/рекламу.")
+            return False
+            
         # 2. Собираем медиа
         photo_id = message.photo.file_id if message.photo else None
             
@@ -168,7 +183,7 @@ async def manual_test(client, message):
     
     # Если в сообщении нет текста и это не реплай с файлом, добавим текст для ИИ
     if not target.text and not target.caption and not target.document:
-        test_text = "Тестовый мод на супер-прыжок для Minecraft 1.21. Добавляет сапоги-прыгуны."
+        test_text = "Nomi: SuperJump.jar\nMatn: Bu mod Minecraft 1.21 uchun balandlikka sakrash imkonini beradi."
         # Имитируем сообщение с текстом
         target.text = test_text
 

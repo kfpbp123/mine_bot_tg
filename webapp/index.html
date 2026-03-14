@@ -26,32 +26,45 @@
         }
     </style>
 </head>
-<body class="p-4">
-    <div id="app" class="max-w-md mx-auto">
+<body class="p-4 md:p-8">
+    <div id="app" class="max-w-4xl mx-auto">
         <!-- Dashboard -->
-        <header class="mb-6">
-            <h1 class="text-2xl font-bold mb-4">Mine Bot Dashboard</h1>
-            <div class="grid grid-cols-2 gap-4">
-                <div class="card p-4 flex flex-col items-center">
-                    <span class="text-hint text-sm mb-1">Queue</span>
-                    <span id="stat-queue" class="text-2xl font-bold">0</span>
+        <header class="mb-8">
+            <h1 class="text-3xl font-extrabold mb-6">Mine Bot Studio</h1>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="card p-6 flex flex-col items-center justify-center">
+                    <span class="text-hint text-sm uppercase tracking-wider mb-2">In Queue</span>
+                    <span id="stat-queue" class="text-4xl font-black text-blue-500">0</span>
                 </div>
-                <div class="card p-4 flex flex-col items-center">
-                    <span class="text-hint text-sm mb-1">Today</span>
-                    <span id="stat-today" class="text-2xl font-bold">0</span>
+                <div class="card p-6 flex flex-col items-center justify-center">
+                    <span class="text-hint text-sm uppercase tracking-wider mb-2">Posted Today</span>
+                    <span id="stat-today" class="text-4xl font-black text-green-500">0</span>
+                </div>
+                <div class="card p-6 flex flex-col items-center justify-center">
+                    <span class="text-hint text-sm uppercase tracking-wider mb-2">Total</span>
+                    <span id="stat-total" class="text-4xl font-black opacity-50">0</span>
+                </div>
+                <div class="card p-6 flex flex-col items-center justify-center">
+                    <span class="text-hint text-sm uppercase tracking-wider mb-2">Channels</span>
+                    <span id="stat-channels" class="text-4xl font-black opacity-50">0</span>
                 </div>
             </div>
         </header>
 
         <!-- Queue Section -->
         <section>
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-semibold">Queue list</h2>
-                <button onclick="fetchData()" class="text-hint"><i data-lucide="refresh-cw" class="w-5 h-5"></i></button>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Content Queue</h2>
+                <button onclick="fetchData()" class="bg-blue-100 p-2 rounded-full text-blue-600 hover:rotate-180 transition-transform duration-500">
+                    <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+                </button>
             </div>
-            <div id="queue-list" class="space-y-4">
+            <div id="queue-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Posts will be here -->
-                <p class="text-hint text-center py-10">Loading...</p>
+                <div class="col-span-full text-hint text-center py-20">
+                    <div class="animate-spin inline-block mb-4"><i data-lucide="loader" class="w-8 h-8"></i></div>
+                    <p>Loading your awesome content...</p>
+                </div>
             </div>
         </section>
     </div>
@@ -83,6 +96,8 @@
                 const stats = await statsRes.json();
                 document.getElementById('stat-queue').innerText = stats.queue;
                 document.getElementById('stat-today').innerText = stats.today;
+                document.getElementById('stat-total').innerText = stats.total;
+                document.getElementById('stat-channels').innerText = stats.channels || 1;
 
                 // Queue
                 const queueRes = await fetch(`${API_URL}/api/queue`);

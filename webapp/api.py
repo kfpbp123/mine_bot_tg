@@ -26,7 +26,7 @@ async def read_index():
     return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
 
 class PostUpdate(BaseModel):
-...
+    text: Optional[str] = None
     scheduled_time: Optional[int] = None
 
 @app.get("/api/stats")
@@ -68,7 +68,6 @@ async def publish_now(post_id: int):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     
-    # core.publish_post_data(post_id, photo_id, text, document_id, channel_id)
     success = core.publish_post_data(post[0], post[1], post[2], post[3], post[4] or config.DEFAULT_CHANNEL)
     if success:
         return {"status": "ok"}

@@ -75,6 +75,18 @@ async def publish_now(post_id: int):
         return {"status": "ok"}
     raise HTTPException(status_code=500, detail="Publish failed")
 
+@app.get("/api/channels")
+async def get_channels_list(user_id: int = 0):
+    channels = utils.get_channels()
+    active = utils.get_active_channel(user_id or getattr(config, 'ADMIN_IDS', [0])[0])
+    return {"channels": channels, "active": active}
+
+@app.post("/api/channels/set")
+async def set_active_channel(channel: str, user_id: int = 0):
+    uid = user_id or getattr(config, 'ADMIN_IDS', [0])[0]
+    database.set_user_setting(uid, channel=channel)
+    return {"status": "ok"}
+
 def run_api():
     port = int(os.getenv("PORT", 8000))
     print(f"📡 Starting Web API on port {port}...")

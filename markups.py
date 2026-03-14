@@ -6,16 +6,15 @@ def get_main_menu(lang='uz'):
     b = BUTTONS.get(lang, BUTTONS['uz'])
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
-    # Кнопка Mini App в главной клавиатуре (только если URL настроен на HTTPS)
+    # Кнопка Mini App - теперь центральный элемент управления
     if config.WEBAPP_URL and config.WEBAPP_URL.startswith('https'):
         try:
-            markup.add(KeyboardButton("📱 Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL)))
+            markup.add(KeyboardButton("🚀 OPEN STUDIO", web_app=WebAppInfo(url=config.WEBAPP_URL)))
         except: pass
             
     markup.add(KeyboardButton(b['create']), KeyboardButton(b['ai_chat']))
-    markup.add(KeyboardButton(b['queue']), KeyboardButton(b['lang']))
-    markup.add(KeyboardButton(b['channels']), KeyboardButton(b['stats']))
-    markup.add(KeyboardButton(b['settings']), KeyboardButton(b['analyze']))
+    markup.add(KeyboardButton(b['lang']), KeyboardButton(b['settings']))
+    markup.add(KeyboardButton(b['analyze']))
     return markup
 
 def get_settings_menu(lang='uz'):

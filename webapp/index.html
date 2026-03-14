@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mine Bot Studio</title>
+    <title>Mine Studio</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -20,93 +20,123 @@
             color: var(--sculk-text);
             background-image: radial-gradient(circle at 50% 50%, #161b22 0%, #0d1117 100%);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow-x: hidden;
         }
         .card {
             background-color: var(--sculk-secondary);
             border: 1px solid rgba(0, 251, 255, 0.1);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-            transition: all 0.3s ease;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .card:hover {
             border-color: rgba(0, 251, 255, 0.4);
-            transform: translateY(-2px);
+            transform: translateY(-4px);
         }
         .btn-primary {
-            background-color: var(--sculk-glow);
+            background: linear-gradient(135deg, #00fbff 0%, #008f91 100%);
             color: #000;
-            box-shadow: 0 0 15px rgba(0, 251, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 251, 255, 0.3);
         }
         .glow-text {
             color: var(--sculk-glow);
-            text-shadow: 0 0 10px rgba(0, 251, 255, 0.5);
+            text-shadow: 0 0 15px rgba(0, 251, 255, 0.6);
         }
         @keyframes warden-pulse {
             0% { transform: scale(1); box-shadow: 0 0 5px rgba(0, 251, 255, 0.4); }
-            50% { transform: scale(1.02); box-shadow: 0 0 20px rgba(0, 251, 255, 0.8); }
+            50% { transform: scale(1.02); box-shadow: 0 0 25px rgba(0, 251, 255, 0.8); }
             100% { transform: scale(1); box-shadow: 0 0 5px rgba(0, 251, 255, 0.4); }
         }
-        .btn-publish {
-            background: linear-gradient(135deg, #00fbff 0%, #008f91 100%);
-            color: #000;
-            animation: warden-pulse 2s infinite ease-in-out;
+        .btn-publish { animation: warden-pulse 2s infinite ease-in-out; }
+        .tab-active {
+            color: var(--sculk-glow);
+            border-bottom: 3px solid var(--sculk-glow);
         }
         textarea {
             background-color: #0d1117 !important;
             color: white !important;
             border: 1px solid #30363d !important;
         }
-        .text-hint { color: var(--sculk-hint); }
+        .hidden-section { display: none; }
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div id="app" class="max-w-4xl mx-auto">
-        <!-- Dashboard -->
-        <header class="mb-10">
-            <h1 class="text-4xl font-black mb-8 glow-text tracking-tighter uppercase">Mine Studio</h1>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                <div class="card p-4 md:p-6 flex flex-col items-center justify-center border-l-4 border-l-[#00fbff]">
-                    <span class="text-hint text-[10px] uppercase tracking-widest mb-1">Queue</span>
-                    <span id="stat-queue" class="text-3xl md:text-4xl font-black text-[#00fbff]">0</span>
-                </div>
-                <div class="card p-4 md:p-6 flex flex-col items-center justify-center">
-                    <span class="text-hint text-[10px] uppercase tracking-widest mb-1">Today</span>
-                    <span id="stat-today" class="text-3xl md:text-4xl font-black text-[#00fbff]">0</span>
-                </div>
-                <div class="card p-4 md:p-6 flex flex-col items-center justify-center">
-                    <span class="text-hint text-[10px] uppercase tracking-widest mb-1">Total</span>
-                    <span id="stat-total" class="text-3xl md:text-4xl font-black opacity-30">0</span>
-                </div>
-                <div class="card p-4 md:p-6 flex flex-col items-center justify-center">
-                    <span class="text-hint text-[10px] uppercase tracking-widest mb-1">Channels</span>
-                    <span id="stat-channels" class="text-3xl md:text-4xl font-black opacity-30">0</span>
-                </div>
-            </div>
-        </header>
+<body class="p-4 md:p-8 pb-24">
+    <div id="app" class="max-w-5xl mx-auto">
+        <!-- Navigation -->
+        <nav class="flex justify-around mb-10 bg-black/30 backdrop-blur-md sticky top-0 z-40 p-2 rounded-2xl border border-white/5">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-6 py-3 font-black uppercase tracking-widest text-xs tab-active transition-all">Studio</button>
+            <button onclick="switchTab('channels')" id="tab-channels" class="px-6 py-3 font-black uppercase tracking-widest text-xs text-hint transition-all">Channels</button>
+        </nav>
 
-        <!-- Queue Section -->
-        <section>
-            <div class="flex justify-between items-center mb-8">
-                <h2 class="text-2xl font-bold tracking-tight">Content Pipeline</h2>
-                <button onclick="fetchData()" class="bg-[#161b22] p-3 rounded-xl text-[#00fbff] border border-[#30363d] hover:bg-[#30363d] transition-all">
-                    <i data-lucide="refresh-cw" class="w-6 h-6"></i>
-                </button>
+        <!-- DASHBOARD SECTION -->
+        <div id="section-dashboard">
+            <header class="mb-12">
+                <h1 class="text-5xl font-black mb-10 glow-text tracking-tighter uppercase italic">MINE STUDIO</h1>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
+                    <div class="card p-6 flex flex-col items-center justify-center border-t-2 border-t-[#00fbff]">
+                        <span class="text-hint text-[10px] uppercase tracking-[0.3em] mb-2">Queue</span>
+                        <span id="stat-queue" class="text-4xl font-black text-[#00fbff]">0</span>
+                    </div>
+                    <div class="card p-6 flex flex-col items-center justify-center border-t-2 border-t-[#00fbff]">
+                        <span class="text-hint text-[10px] uppercase tracking-[0.3em] mb-2">Today</span>
+                        <span id="stat-today" class="text-4xl font-black text-[#00fbff]">0</span>
+                    </div>
+                    <div class="card p-6 flex flex-col items-center justify-center border-t-2 border-t-white/10">
+                        <span class="text-hint text-[10px] uppercase tracking-[0.3em] mb-2">Total</span>
+                        <span id="stat-total" class="text-4xl font-black opacity-30">0</span>
+                    </div>
+                    <div class="card p-6 flex flex-col items-center justify-center border-t-2 border-t-white/10">
+                        <span class="text-hint text-[10px] uppercase tracking-[0.3em] mb-2">Active</span>
+                        <span id="stat-channels" class="text-4xl font-black opacity-30">0</span>
+                    </div>
+                </div>
+            </header>
+
+            <section>
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-3xl font-black tracking-tighter uppercase italic opacity-80 underline decoration-[#00fbff]/30">Content Pipeline</h2>
+                    <button onclick="fetchData()" class="bg-[#161b22] p-4 rounded-2xl text-[#00fbff] border border-[#30363d] shadow-lg active:scale-95 transition-all">
+                        <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                <div id="queue-list" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Posts will be here -->
+                </div>
+            </section>
+        </div>
+
+        <!-- CHANNELS SECTION -->
+        <div id="section-channels" class="hidden-section">
+            <h2 class="text-4xl font-black mb-10 glow-text tracking-tighter uppercase italic">Network Management</h2>
+            <div id="channels-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Channels will be here -->
             </div>
-            <div id="queue-list" class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                <div class="col-span-full text-hint text-center py-20">Loading sculk signals...</div>
-            </div>
-        </section>
+        </div>
     </div>
 
     <!-- Edit Modal -->
-    <div id="modal" class="fixed inset-0 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4 z-50">
-        <div class="card w-full max-w-2xl p-6 md:p-8 border-[#00fbff]/30">
-            <h3 class="text-2xl font-bold mb-6 glow-text">Modify Essence</h3>
-            <textarea id="edit-text" class="w-full h-64 p-4 rounded-xl mb-6 outline-none focus:border-[#00fbff] transition-all font-mono text-sm" placeholder="Post text..."></textarea>
+    <div id="modal" class="fixed inset-0 bg-black/95 backdrop-blur-xl hidden flex items-center justify-center p-4 z-50">
+        <div class="card w-full max-w-2xl p-8 border-[#00fbff]/30">
+            <h3 class="text-2xl font-black mb-6 glow-text uppercase tracking-widest italic">Modify Essence</h3>
+            <textarea id="edit-text" class="w-full h-80 p-6 rounded-2xl mb-8 outline-none focus:border-[#00fbff] transition-all font-mono text-sm leading-relaxed" placeholder="Signals..."></textarea>
             <div class="flex space-x-4">
-                <button onclick="saveEdit()" class="btn-primary flex-1 py-4 rounded-xl font-bold uppercase tracking-widest hover:brightness-110 transition-all">Save Changes</button>
-                <button onclick="closeModal()" class="bg-transparent text-hint border border-[#30363d] flex-1 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-[#30363d] transition-all">Discard</button>
+                <button onclick="saveEdit()" class="btn-primary flex-1 py-5 rounded-2xl font-black uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Commit Changes</button>
+                <button onclick="closeModal()" class="bg-transparent text-hint border border-[#30363d] flex-1 py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#30363d] active:scale-95 transition-all">Discard</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Time Modal -->
+    <div id="modal-time" class="fixed inset-0 bg-black/95 backdrop-blur-xl hidden flex items-center justify-center p-4 z-50">
+        <div class="card w-full max-w-md p-8 border-[#00fbff]/30">
+            <h3 class="text-2xl font-black mb-6 glow-text uppercase tracking-widest italic">Shift Time</h3>
+            <div class="grid grid-cols-2 gap-4 mb-8">
+                <button onclick="shiftTime(1)" class="bg-[#161b22] border border-[#30363d] py-4 rounded-xl font-bold">+1 Hour</button>
+                <button onclick="shiftTime(4)" class="bg-[#161b22] border border-[#30363d] py-4 rounded-xl font-bold">+4 Hours</button>
+                <button onclick="shiftTime(12)" class="bg-[#161b22] border border-[#30363d] py-4 rounded-xl font-bold">+12 Hours</button>
+                <button onclick="shiftTime(24)" class="bg-[#161b22] border border-[#30363d] py-4 rounded-xl font-bold">+24 Hours</button>
+            </div>
+            <button onclick="closeTimeModal()" class="w-full bg-transparent text-hint border border-[#30363d] py-4 rounded-xl font-black uppercase">Cancel</button>
         </div>
     </div>
 
@@ -116,15 +146,25 @@
         tg.enableClosingConfirmation();
 
         let currentPostId = null;
+        let currentPostTime = null;
         const API_URL = window.location.origin;
 
+        function switchTab(tab) {
+            document.getElementById('section-dashboard').classList.add('hidden-section');
+            document.getElementById('section-channels').classList.add('hidden-section');
+            document.getElementById('tab-dashboard').classList.remove('tab-active', 'text-hint');
+            document.getElementById('tab-channels').classList.remove('tab-active', 'text-hint');
+            
+            document.getElementById(`section-${tab}`).classList.remove('hidden-section');
+            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            
+            if (tab === 'channels') fetchChannels();
+            else fetchData();
+        }
+
         async function fetchData() {
-            console.log('Fetching data from:', API_URL);
             try {
-                // Добавляем timestamp для обхода кэша
                 const ts = Date.now();
-                
-                // Stats
                 const statsRes = await fetch(`${API_URL}/api/stats?t=${ts}`);
                 const stats = await statsRes.json();
                 document.getElementById('stat-queue').innerText = stats.queue;
@@ -132,20 +172,24 @@
                 document.getElementById('stat-total').innerText = stats.total;
                 document.getElementById('stat-channels').innerText = stats.channels || 0;
 
-                // Queue
                 const queueRes = await fetch(`${API_URL}/api/queue?t=${ts}`);
                 const queue = await queueRes.json();
                 renderQueue(queue);
-            } catch (e) {
-                console.error('Fetch error:', e);
-                alert('Connection error. Check Railway logs.');
-            }
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchChannels() {
+            try {
+                const res = await fetch(`${API_URL}/api/channels`);
+                const data = await res.json();
+                renderChannels(data.channels, data.active);
+            } catch (e) { console.error(e); }
         }
 
         function renderQueue(posts) {
             const list = document.getElementById('queue-list');
             if (!posts || posts.length === 0) {
-                list.innerHTML = '<div class="col-span-full text-hint text-center py-20 bg-[#161b22] rounded-3xl border border-dashed border-[#30363d]">The void is empty...</div>';
+                list.innerHTML = '<div class="col-span-full text-hint text-center py-24 bg-[#161b22] rounded-3xl border border-dashed border-[#30363d] uppercase tracking-[0.3em] opacity-50 italic">The Void is Empty</div>';
                 return;
             }
 
@@ -157,55 +201,60 @@
                 let attachmentsHtml = '';
                 if (post.photo_id) {
                     const isAlbum = post.photo_id.includes(',');
-                    attachmentsHtml += `
-                        <div class="bg-[#00fbff]/10 text-[#00fbff] p-3 rounded-xl flex items-center mb-4 border border-[#00fbff]/20">
-                            <i data-lucide="${isAlbum ? 'layers' : 'image'}" class="w-4 h-4 mr-2"></i>
-                            <span class="text-[10px] font-bold uppercase tracking-wider">${isAlbum ? 'Photo Album' : 'Single Photo'}</span>
-                        </div>
-                    `;
+                    attachmentsHtml += `<div class="bg-[#00fbff]/10 text-[#00fbff] p-3 rounded-xl flex items-center mb-4 border border-[#00fbff]/20"><i data-lucide="${isAlbum ? 'layers' : 'image'}" class="w-4 h-4 mr-2"></i><span class="text-[10px] font-black uppercase">${isAlbum ? 'Visual Album' : 'Visual Data'}</span></div>`;
                 }
                 if (post.document_id) {
-                    attachmentsHtml += `
-                        <div class="bg-amber-500/10 text-amber-500 p-3 rounded-xl flex items-center mb-4 border border-amber-500/20">
-                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
-                            <span class="text-[10px] font-bold uppercase tracking-wider">Document/File</span>
-                        </div>
-                    `;
+                    attachmentsHtml += `<div class="bg-amber-500/10 text-amber-500 p-3 rounded-xl flex items-center mb-4 border border-amber-500/20"><i data-lucide="file-text" class="w-4 h-4 mr-2"></i><span class="text-[10px] font-black uppercase">Ancient File</span></div>`;
                 }
 
                 return `
                     <div class="card overflow-hidden flex flex-col border-[#30363d]">
-                        <div class="p-4 border-b border-[#30363d] flex justify-between items-center bg-[#0d1117]/50">
+                        <div class="p-5 border-b border-[#30363d] flex justify-between items-center bg-[#0d1117]/50">
                             <div class="flex items-center">
-                                <div class="w-2 h-2 rounded-full bg-[#00fbff] mr-2 shadow-[0_0_8px_#00fbff]"></div>
-                                <span class="text-[10px] font-black uppercase tracking-widest text-[#00fbff] opacity-80">${post.channel}</span>
+                                <div class="w-2 h-2 rounded-full bg-[#00fbff] mr-3 shadow-[0_0_10px_#00fbff]"></div>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-[#00fbff]">${post.channel}</span>
                             </div>
-                            <span class="text-[10px] font-mono text-hint bg-[#161b22] px-2 py-1 rounded border border-[#30363d]">${date}</span>
+                            <button onclick="openTimeModal(${post.id}, ${post.scheduled_time})" class="text-[10px] font-mono text-[#00fbff] bg-[#161b22] px-3 py-1.5 rounded-lg border border-[#00fbff]/30 shadow-inner hover:bg-[#00fbff]/10 transition-all">${date}</button>
                         </div>
-                        <div class="p-6 flex-1">
+                        <div class="p-8 flex-1">
                             ${attachmentsHtml}
-                            <div class="text-sm whitespace-pre-wrap leading-relaxed opacity-90 mb-4 font-sans text-gray-300">
+                            <div class="text-sm whitespace-pre-wrap leading-relaxed opacity-90 font-sans text-gray-300 italic">
                                 ${post.text.replace(/<[^>]*>?/gm, '')}
                             </div>
                         </div>
-                        <div class="p-4 bg-[#0d1117]/50 border-t border-[#30363d] flex space-x-3">
+                        <div class="p-5 bg-[#0d1117]/50 border-t border-[#30363d] flex space-x-4">
                             <button onclick="openEdit(${post.id}, \`${post.text.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`)" 
-                                    class="flex-1 bg-[#161b22] border border-[#30363d] text-[#e6edf3] py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#30363d] transition-all">
-                                Edit
-                            </button>
+                                    class="flex-1 bg-[#161b22] border border-[#30363d] text-[#e6edf3] py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-[#30363d] transition-all">Edit</button>
                             <button onclick="publishNow(${post.id})" 
-                                    class="flex-1 btn-publish py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all">
-                                Publish
-                            </button>
+                                    class="flex-1 btn-publish py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] bg-white text-black shadow-xl">Publish</button>
                             <button onclick="deletePost(${post.id})" 
-                                    class="w-12 flex items-center justify-center bg-[#161b22] border border-red-900/30 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all">
-                                <i data-lucide="trash-2" class="w-5 h-5"></i>
-                            </button>
+                                    class="w-14 flex items-center justify-center bg-[#161b22] border border-red-900/30 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all"><i data-lucide="trash-2" class="w-6 h-6"></i></button>
                         </div>
                     </div>
                 `;
             }).join('');
             lucide.createIcons();
+        }
+
+        function renderChannels(channels, active) {
+            const list = document.getElementById('channels-list');
+            list.innerHTML = channels.map(ch => `
+                <div class="card p-6 flex justify-between items-center ${ch === active ? 'border-[#00fbff] bg-[#00fbff]/5' : 'border-[#30363d]'}">
+                    <div>
+                        <span class="text-sm font-black uppercase tracking-widest ${ch === active ? 'text-[#00fbff]' : 'text-hint'}">${ch}</span>
+                        ${ch === active ? '<div class="text-[10px] text-[#00fbff]/50 font-bold uppercase mt-1">Active Core</div>' : ''}
+                    </div>
+                    ${ch !== active ? `
+                        <button onclick="setActiveChannel('${ch}')" class="bg-[#161b22] border border-[#30363d] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#00fbff]">Activate</button>
+                    ` : '<i data-lucide="check-circle" class="text-[#00fbff] w-6 h-6"></i>'}
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        async function setActiveChannel(ch) {
+            await fetch(`${API_URL}/api/channels/set?channel=${encodeURIComponent(ch)}`, {method: 'POST'});
+            fetchChannels();
         }
 
         function openEdit(id, text) {
@@ -214,48 +263,53 @@
             document.getElementById('modal').classList.remove('hidden');
         }
 
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-        }
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
 
         async function saveEdit() {
             const newText = document.getElementById('edit-text').value;
-            try {
-                await fetch(`${API_URL}/api/queue/${currentPostId}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({text: newText})
-                });
-                closeModal();
-                fetchData();
-            } catch (e) { alert('Save failed'); }
+            await fetch(`${API_URL}/api/queue/${currentPostId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: newText})
+            });
+            closeModal();
+            fetchData();
+        }
+
+        function openTimeModal(id, time) {
+            currentPostId = id;
+            currentPostTime = time;
+            document.getElementById('modal-time').classList.remove('hidden');
+        }
+
+        function closeTimeModal() { document.getElementById('modal-time').classList.add('hidden'); }
+
+        async function shiftTime(hours) {
+            const newTime = currentPostTime + (hours * 3600);
+            await fetch(`${API_URL}/api/queue/${currentPostId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({scheduled_time: newTime})
+            });
+            closeTimeModal();
+            fetchData();
         }
 
         async function deletePost(id) {
-            if (!confirm('Delete this post from the void?')) return;
-            try {
-                await fetch(`${API_URL}/api/queue/${id}`, {method: 'DELETE'});
-                fetchData();
-            } catch (e) { alert('Delete failed'); }
+            if (!confirm('EXTRACT FROM THE VOID?')) return;
+            await fetch(`${API_URL}/api/queue/${id}`, {method: 'DELETE'});
+            fetchData();
         }
 
         async function publishNow(id) {
             tg.MainButton.setText('TRANSMITTING...');
             tg.MainButton.show();
-            try {
-                await fetch(`${API_URL}/api/queue/${id}/publish`, {method: 'POST'});
-                tg.MainButton.hide();
-                fetchData();
-            } catch (e) { 
-                alert('Transmission failed');
-                tg.MainButton.hide();
-            }
+            await fetch(`${API_URL}/api/queue/${id}/publish`, {method: 'POST'});
+            tg.MainButton.hide();
+            fetchData();
         }
 
-        window.onload = () => {
-            fetchData();
-            lucide.createIcons();
-        };
+        window.onload = () => { fetchData(); lucide.createIcons(); };
     </script>
 </body>
 </html>

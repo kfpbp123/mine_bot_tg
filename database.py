@@ -166,6 +166,15 @@ def clear_draft(user_id):
 def get_stats():
     import pytz
     from datetime import datetime
+    import config
+    
+    # Считаем каналы
+    channels_count = len(config.AVAILABLE_CHANNELS)
+    if os.path.exists("channels.txt"):
+        with open("channels.txt", "r", encoding="utf-8") as f:
+            extra = [l for l in f.readlines() if l.strip()]
+            channels_count += len(extra)
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM queue")
@@ -179,7 +188,7 @@ def get_stats():
     c.execute("SELECT COUNT(*) FROM queue WHERE status='posted' AND scheduled_time >= ?", (today_start,))
     today = c.fetchone()[0]
     conn.close()
-    return {'total': total, 'published': published, 'queue': queue_count, 'today': today}
+    return {'total': total, 'published': published, 'queue': queue_count, 'today': today, 'channels': channels_count}
 
 def get_all_posts():
     conn = sqlite3.connect(DB_PATH)

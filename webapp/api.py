@@ -35,8 +35,9 @@ async def get_stats():
 
 @app.get("/api/queue")
 async def get_queue():
+    print(f"📁 API accessing DB at: {database.DB_PATH}")
     posts = database.get_all_pending()
-    print(f"🔍 API: Found {len(posts)} pending posts in DB.")
+    print(f"📊 API: Found {len(posts)} pending posts. Full list: {[p[0] for p in posts]}")
     result = []
     for p in posts:
         result.append({

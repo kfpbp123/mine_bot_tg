@@ -6,8 +6,11 @@ def get_main_menu(lang='uz'):
     b = BUTTONS.get(lang, BUTTONS['uz'])
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
-    # Кнопка Mini App в главной клавиатуре
-    markup.add(KeyboardButton("📱 Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL)))
+    # Кнопка Mini App в главной клавиатуре (только если URL настроен на HTTPS)
+    if config.WEBAPP_URL and config.WEBAPP_URL.startswith('https'):
+        try:
+            markup.add(KeyboardButton("📱 Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL)))
+        except: pass
             
     markup.add(KeyboardButton(b['create']), KeyboardButton(b['ai_chat']))
     markup.add(KeyboardButton(b['queue']), KeyboardButton(b['lang']))
@@ -17,10 +20,12 @@ def get_main_menu(lang='uz'):
 
 def get_settings_menu(lang='uz'):
     markup = InlineKeyboardMarkup(row_width=2)
-    # Кнопка Mini App в инлайн-меню настроек
-    markup.add(
-        InlineKeyboardButton("📱 Open Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL))
-    )
+    # Кнопка Mini App в инлайн-меню настроек (только если HTTPS)
+    if config.WEBAPP_URL and config.WEBAPP_URL.startswith('https'):
+        try:
+            markup.add(InlineKeyboardButton("📱 Open Mini App", web_app=WebAppInfo(url=config.WEBAPP_URL)))
+        except: pass
+        
     markup.add(
         InlineKeyboardButton("📢 Ad Text", callback_data="set_ad_text"),
         InlineKeyboardButton("➕ Add Channel", callback_data="add_new_channel")

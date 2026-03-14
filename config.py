@@ -18,7 +18,10 @@ DEFAULT_CHANNEL = AVAILABLE_CHANNELS[0] if AVAILABLE_CHANNELS else ""
 WATERMARK_TEXT = "@lazikosmods"
 
 # 🌐 Telegram Mini App URL (Ваш IP или домен)
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8000")
+_url = os.getenv("WEBAPP_URL", "")
+if _url and not _url.startswith("http"):
+    _url = "https://" + _url
+WEBAPP_URL = _url or "http://localhost:8000"
 
 # 🧠 НОВАЯ НАСТРОЙКА: Интервал умной очереди (в часах)
 SMART_QUEUE_INTERVAL_HOURS = 8
